@@ -16,10 +16,10 @@ collaborators.
 
 Volspy has two usage scenarios:
 
-# A framework for volumetric data processing tools, where a basic
+1. A framework for volumetric data processing tools, where a basic
   interactive volume rendering capability can complement custom
   data-processing tools.
-# A standalone viewer application for quickly inspecting several
+2. A standalone viewer application for quickly inspecting several
   common 3D image formats.
 
 ### Prerequisites
@@ -43,8 +43,8 @@ NiBabel prerequisite if you do not need to read those types of files.
 
 ### Installation
 
-# Check out the development code from GitHub.
-# Install with `python setup.py install`.
+1. Check out the development code from GitHub.
+2. Install with `python setup.py install`.
 
 ## Help and Contact
 
