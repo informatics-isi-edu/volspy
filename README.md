@@ -5,6 +5,11 @@ interactive volume visualization tool. Volspy is being developed to
 support research involving 3D fluorescence microscopy imaging, but may
 be applicable to other 3D images as well.
 
+## Screenshots
+
+<img src="http://www.isi.edu/~karlcz/sample-data/volspy-shot1.png" />
+
+<img src="http://www.isi.edu/~karlcz/sample-data/volspy-shot2.png" />
 
 ## Status
 
@@ -45,6 +50,34 @@ NiBabel prerequisite if you do not need to read those types of files.
 
 1. Check out the development code from GitHub.
 2. Install with `python setup.py install`.
+
+### Viewing an Image
+
+1. Obtain a sample 1-3 channel 3D TIFF image such as:
+   http://www.isi.edu/~karlcz/sample-data/zebra-d19-03b-D.ome.tiff.gz
+   **Warning: this is a large 886 MB file!**
+2. Launch the viewer `volspy-viewer zebra-d19-03b-D.ome.tiff`
+3. Interact with the viewer
+  - Press the `ESC` key when you have had enough.
+  - Press the 'h' key to get UI help printed to console output.
+  - Click and drag volume with primary mouse button to rotate.
+  - Press arrow keys with shift modifer to induce continuous rotation.
+  - Press number keys `1` to `9` to change intensity gain.
+  - Press keys 'f' and 'F' to adjust the floor-level image intensity
+    that is mapped to black.
+  - Press `c` key to cycle through color blending modes:
+    - Partial transparency
+    - Additive blend
+    - Maximum intensity projection
+  - Click and drag vertically with secondary mouse button to drag a
+    slicing plane through the volume. The plane is perpindicular to
+    the viewing axis and its depth is controlled with the vertical
+    mouse position.
+  - Click and drag vertically with the tertiary mouse button to drag a
+    clipping plane through the volume.
+
+Do not be alarmed by the copious diagnostic outputs streaming out on
+the console. Did we mention this is experimental code?
 
 ## Help and Contact
 
