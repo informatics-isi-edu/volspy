@@ -95,6 +95,61 @@ def load_tiff(fname):
     data = None
     md = None
 
+    def canonicalize(data, axes, flipY=True):
+        """Restructure to our preferred CZYX format."""
+        print data.shape, axes, data.dtype, data.strides, data.nbytes
+
+        pos = axes.find('T')
+        if pos >= 0:
+            # remove useless time axis
+            if data.shape[pos] == 1:
+                data = data[
+                    tuple(
+                        [ slice(None) for i in range(pos) ]
+                        + [ 0 ]
+                        + [ slice(None) for i in range(pos+1, data.ndim) ]
+                    )
+                ]
+                axes = axes[0:pos] + axes[pos+1:]
+            else:
+                raise NotImplementedError('Unexpected TIFF with T axis length %d' % data.shape[pos])
+
+        pos = axes.find('C')
+        if pos >= 1:
+            # move color axis to first position
+            data = data.transpose(
+                *tuple(
+                    [ pos ]
+                    + [ i for i in range(data.ndim) if i != pos ]
+                )
+            )
+            axes = axes[pos] + ''.join([
+                axes[i] for i in range(data.ndim) if i != pos
+            ])
+        elif pos == 0:
+            pass
+        elif data.ndim == 3:
+            pass
+        else:
+            raise NotImplementedError('Unexpected %d-dimension TIFF without C axis.' % data.ndim)
+
+        # flip Y axis to match Fiji user expectation
+        pos = axes.find('Y')
+        if pos >= 0:
+            if flipY:
+                data = data[
+                    tuple(
+                        [ slice(None) for i in range(pos) ]
+                        + [ slice(None, None, -1) ]
+                        + [ slice(None) for i in range(pos+1, data.ndim) ]
+                    )
+                ]
+        else:
+            raise NotImplementedError('Unexpected TIFF without Y axis.')
+
+        print data.shape, axes, data.dtype, data.strides, data.nbytes
+        return data, axes
+
     if tf.is_ome:
         # get OME-TIFF XML metadata
         p = list(tf)[0]
@@ -109,26 +164,7 @@ def load_tiff(fname):
         tf.close()
         tf = None
 
-        print data.shape, axes, data.dtype, data.strides, data.nbytes
-
-        # HACK below: flip Y axis to compensate for Huygens LSM -> OME-XML path
-        if axes[0] == 'T' and data.shape[0] == 1:
-            # remove useless time axis
-            data = data[0,...]
-            axes = axes[1:]
-            data = data[:,::-1,:]
-        elif axes[0:2] == 'CT' and data.shape[1] == 1:
-            # remote useless time axis
-            data = data[:,0,...]
-            axes = axes[0] + axes[2:]
-            data = data[:,:,::-1,:]
-        elif axes[0:4] == 'CZYX':
-            data = data[:,:,::-1,:]
-        else:
-            raise NotImplementedError(
-                'Unsupported TIFF image with axes %s and shape %s'
-                % (axes, data.shape)
-            )
+        data, axes = canonicalize(data, axes)
 
         md = ImageMetadata(
             float(a['PhysicalSizeX']),
@@ -149,23 +185,7 @@ def load_tiff(fname):
         data = tf.asarray()
         axes = tf.series[0]['axes']
 
-        if axes[0] == 'T' and data.shape[0] == 1:
-            data = data[0,...]
-            axes = axes[1:]
-        else:
-            raise NotImplementedError(
-                'Unsupported LSM image with axes %s and shape %s'
-                % (axes, data.shape)
-            )
-
-        if axes[0] == 'Z' and axes[1] == 'C':
-            data = data.transpose(1, 0, 2, 3)
-            axes = axes[1] + axes[0] + axes[2:]
-        else:
-            raise NotImplementedError(
-                'Unsupported LSM image with axes %s and shape %s'
-                % (axes, data.shape)
-            )
+        data, axes = canonicalize(data, axis)
 
         md = ImageMetadata(
             lsmi.voxel_size_x * 10**6,
@@ -179,7 +199,8 @@ def load_tiff(fname):
         data = tf.asarray()
         axes = tf.series[0]['axes']
         md = None
-        if data.ndim == 4 and data.shape[3] in [1, 3]:
+        print axes, data.shape
+        if data.ndim == 4 and data.shape[3] in range(1, 5):
             data = data.transpose(3,0,1,2)
         elif data.ndim == 3:
             data = data[None,:,:,:]
