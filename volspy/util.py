@@ -185,7 +185,7 @@ def load_tiff(fname):
         data = tf.asarray()
         axes = tf.series[0]['axes']
 
-        data, axes = canonicalize(data, axis)
+        data, axes = canonicalize(data, axes)
 
         md = ImageMetadata(
             lsmi.voxel_size_x * 10**6,
