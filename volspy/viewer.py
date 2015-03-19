@@ -28,13 +28,7 @@ def keydoc(details):
 class Canvas(app.Canvas):
 
     def _reform_image(self, I, meta):
-        assert I.shape[3] <= 3
-        # swap red/green for our typical confocal 2-channel images
-        # and drop channels beyond 2
-        if I.shape[3] >= 2:
-            return I[:,:,:,1::-1]
-        else:
-            return I
+        return I[:,:,:,0:3]
 
     _frag_glsl_dicts = None
     _vol_interp = 'linear'
