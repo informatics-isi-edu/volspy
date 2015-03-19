@@ -158,12 +158,7 @@ class ImageCropper (object):
         }[(nc, bps)]
 
     def get_texture3d(self, outtexture=None):
-        """Pack 1 or 2 channel image data into RGBA Texture3D.
-
-           R: most significant bits of channel 0
-           G: least significant bits of channel 0
-           B: most significant bits of channel 1
-           A: least significant bits of channel 1
+        """Pack 1-4 channel image data into R, RG, RGB, RGBA Texture3D.
 
            outtexture:
              None:     allocate new Texture3D
