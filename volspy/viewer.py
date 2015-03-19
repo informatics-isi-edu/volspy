@@ -85,11 +85,11 @@ class Canvas(app.Canvas):
             [
                 ('Q', self.quit),
                 ('P', self.toggle_projection),
-                ('C', self.toggle_color_mode),
+                ('B', self.toggle_color_mode),
                 ('Z', self.adjust_zoom),
                 ('R', self.reset_ui),
                 ('F', self.adjust_floor_level),
-                ('H', self.help)
+                ('?', self.help)
                 ]
             + [ (k, self.adjust_gain) for k in 'G1234567890!@#$%^&*()' ]
             + [ 
@@ -189,7 +189,7 @@ Resize viewing window using native window-manager controls.
         self.volume_renderer.set_uniform('u_floorlvl', self.floorlvl)
 
     def toggle_color_mode(self, event=None):
-        """Cycle through color rendering modes."""
+        """Cycle through color blending modes."""
         self.volume_renderer.set_color_mode() # toggles w/o optional argument
         self.update()
 
