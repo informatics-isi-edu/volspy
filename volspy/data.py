@@ -75,7 +75,9 @@ class ImageCropper (object):
 
         self.last_zoom = None
         self.last_origin = None
+        self.last_channels = None
         self.origin = None
+        self.channels = None
         self.set_view()
         self.last_level = None
 
@@ -117,11 +119,22 @@ class ImageCropper (object):
             p -= 1
         print 'pyramid %d levels deep' % len(self.pyramid)
 
-    def set_view(self, zoom=1.0, origin=[0,0,0], anti_view=None):
+    def set_view(self, zoom=1.0, origin=[0,0,0], anti_view=None, channels=None):
         self.zoom = zoom
         self.origin = tuple(origin)
         if anti_view is not None:
             self.anti_view = anti_view
+        if channels is not None:
+            # use caller-specified sequence of channels
+            assert type(channels) is tuple
+            assert len(channels) <= 4
+            self.channels = channels
+        else:
+            # default to first N channels u to 3 for RGB direct mapping
+            self.channels = tuple(range(0, min(self.pyramid[0].shape[3], 3)))
+        for c in self.channels:
+            assert c >= 0
+            assert c < self.pyramid[0].shape[3]
 
     def _get_texture3d_shape3(self, level=None):
         if level is None:
@@ -130,7 +143,7 @@ class ImageCropper (object):
 
     def _get_texture3d_format(self):
         I0 = self.pyramid[0]
-        nc = I0.shape[3]
+        nc = len(self.channels)
 
         if I0.dtype == np.uint8:
             bps = 1
@@ -158,7 +171,7 @@ class ImageCropper (object):
         }[(nc, bps)]
 
     def get_texture3d(self, outtexture=None):
-        """Pack 1-4 channel image data into R, RG, RGB, RGBA Texture3D.
+        """Pack N-channel image data into R, RG, RGB, RGBA Texture3D using self.channels projection.
 
            outtexture:
              None:     allocate new Texture3D
@@ -174,14 +187,16 @@ class ImageCropper (object):
 
         # choose size for texture data
         D, H, W = self._get_texture3d_shape3(level)
-        C = C0
+        C = len(self.channels)
 
         if outtexture is None:
             print 'allocating texture3D'
             format, internalformat = self._get_texture3d_format()
             print format, internalformat
             outtexture = gloo.Texture3D(shape=(D, H, W, C), format=format, internalformat=internalformat)
-        elif self.last_level == level and self.last_origin == self.origin:
+        elif self.last_level == level \
+             and self.last_origin == self.origin \
+             and self.last_channels == self.channels:
             # don't need to reload texture data
             print 'reusing texture', self.last_level, level, self.last_origin, self.origin
             return outtexture
@@ -189,7 +204,7 @@ class ImageCropper (object):
             print 'regenerating texture', self.last_level, level, self.last_origin, self.origin
 
         print 'using level', len(self.pyramid) + level
-        print (D, H, W, C0), '<-', I0.shape, I0.dtype
+        print (D, H, W, C), '<-', I0.shape, list(self.channels), I0.dtype
 
         # offsets to center data in texture + border pad
 
@@ -226,20 +241,23 @@ class ImageCropper (object):
         # normalize for OpenGL [0,1.0] or [0,2**N-1] and zero black-level
         maxval = I0.max()
         minval = I0.min()
-        if I0.dtype == np.uint8:
-            tmpout = np.zeros((D+1, H+1, W+1, C0), dtype=np.uint8)
-            tmpout[oKK,oJJ,oII,0:C0] = (I0[iKK,iJJ,iII,:].astype(np.float32) - minval) * float(2**8-1)/(maxval - minval)
-        elif I0.dtype == np.uint16 or I0.dtype == np.int16:
-            tmpout = np.zeros((D+1, H+1, W+1, C0), dtype=np.uint16)
-            tmpout[oKK,oJJ,oII,0:C0] = (I0[iKK,iJJ,iII,:].astype(np.float32) - minval) * float(2**16-1)/(maxval - minval)
+        scale = 1.0/(float(maxval) - float(minval))
+        if I0.dtype == np.uint8 or I0.dtype == np.int8:
+            tmpout = np.zeros((D+1, H+1, W+1, C), dtype=np.uint8)
+            scale *= float(2**8-1)
         else:
-            assert I0.dtype == np.float16 or I0.dtype == np.float32
-            tmpout = np.zeros((D+1, H+1, W+1, C0), dtype=np.uint16 )
-            tmpout[oKK,oJJ,oII,0:C0] = (I0[iKK,iJJ,iII,:].astype(np.float32) - minval) * (2**16-1)/(maxval - minval)
+            assert I0.dtype == np.float16 or I0.dtype == np.float32 or I0.dtype == np.uint16 or I0.dtype == np.int16
+            tmpout = np.zeros((D+1, H+1, W+1, C), dtype=np.uint16 )
+            scale *= (2.0**16-1)
+
+        # pack selected channels into texture
+        for i in range(C):
+            tmpout[oKK,oJJ,oII,i] = (I0[iKK,iJJ,iII,self.channels[i]].astype(np.float32) - minval) * scale
 
         self.last_level = level
         self.last_zoom = self.zoom
         self.last_origin = self.origin
+        self.last_channels = self.channels
         outtexture.set_data(tmpout)
         return outtexture
 

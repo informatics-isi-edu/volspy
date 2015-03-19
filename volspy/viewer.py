@@ -28,7 +28,7 @@ def keydoc(details):
 class Canvas(app.Canvas):
 
     def _reform_image(self, I, meta):
-        return I[:,:,:,0:3]
+        return I
 
     _frag_glsl_dicts = None
     _vol_interp = 'linear'
@@ -40,6 +40,14 @@ class Canvas(app.Canvas):
             )
 
         self.vol_cropper = ImageCropper(filename, maxtexsize, self._reform_image)
+        nc = self.vol_cropper.pyramid[0].shape[3]
+        if nc > 3:
+            print "%d channel image encountered, switching to single-channel mode" % nc
+            self.vol_channels = (0,)
+        else:
+            print "%d channel image encountered, using direct %d-channel mapping" % (nc, nc)
+            self.vol_channels = None
+        self.vol_cropper.set_view(channels=self.vol_channels)
         self.vol_texture = self.vol_cropper.get_texture3d()
         self.vol_zoom = 1.0
         self.origin = [0, 0, 0] # Z, Y, X
@@ -48,10 +56,14 @@ class Canvas(app.Canvas):
         self.size = W, W
         self.prev_size = self.size
         self.perspective = True
+        if self.vol_channels is not None:
+            nc = len(self.vol_channels)
+        else:
+            nc = self.vol_cropper.pyramid[0].shape[3]
         self.volume_renderer = VolumeRenderer(
             self.vol_cropper,
             self.vol_texture,
-            self.vol_cropper.pyramid[0].shape[-1],
+            nc,
             np.eye(4, dtype=np.float32), # view
             (int(maxtexsize * 4), int(maxtexsize * 4)), # fbo_size
             frag_glsl_dicts=self._frag_glsl_dicts,
@@ -86,6 +98,7 @@ class Canvas(app.Canvas):
                 ('Q', self.quit),
                 ('P', self.toggle_projection),
                 ('B', self.toggle_color_mode),
+                ('C', self.toggle_channel),
                 ('Z', self.adjust_zoom),
                 ('R', self.reset_ui),
                 ('F', self.adjust_floor_level),
@@ -140,7 +153,7 @@ Resize viewing window using native window-manager controls.
         
 
     def reload_data(self):
-        self.vol_cropper.set_view(self.zoom, self.origin)
+        self.vol_cropper.set_view(self.zoom, self.origin, channels=self.vol_channels)
         self.vol_cropper.get_texture3d(self.vol_texture)
         self.update()
 
@@ -192,6 +205,15 @@ Resize viewing window using native window-manager controls.
         """Cycle through color blending modes."""
         self.volume_renderer.set_color_mode() # toggles w/o optional argument
         self.update()
+
+    def toggle_channel(self, event=None):
+        """Cycle through image channels when in single-channel mode."""
+        nc = self.vol_cropper.pyramid[0].shape[3]
+        if self.vol_channels is not None:
+            c = self.vol_channels[0]
+            self.vol_channels = ((c+1)%nc,)
+            self.reload_data()
+            print "viewing channel %d of %d (zero-based)" % (c, nc)
 
     def toggle_projection(self, event=None):
         """Toggle between perspective and orthonormal projection modes."""
@@ -522,7 +544,7 @@ Resize viewing window using native window-manager controls.
         self.anti_view = anti_view
         self.volume_renderer.set_vol_view(view, anti_view)
         self.volume_renderer.set_clip_plane([0, 0, 1, max(self.clip_distance, -0.866 / self.zoom)])
-        self.vol_cropper.set_view(self.zoom, self.origin, anti_view)
+        self.vol_cropper.set_view(self.zoom, self.origin, anti_view, self.vol_channels)
 
         if prev_view is None \
                 or (view != prev_view).any():
