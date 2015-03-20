@@ -53,22 +53,27 @@ NiBabel prerequisite if you do not need to read those types of files.
 
 ### Viewing an Image
 
-1. Obtain a sample 1-3 channel 3D TIFF image such as:
-   http://www.isi.edu/~karlcz/sample-data/zebra-d19-03b-D.ome.tiff.gz
+1. Obtain a sample 1-4 channel 3D TIFF image such as:
+   http://www.isi.edu/~karlcz/sample-data/zebra-d19-03b-D.ome.tiff
    **Warning: this is a large 886 MB file!**
+  - A 1-channel image will be interpreted as gray.
+  - A 2-channel image will be interpreted as red-green.
+  - A 3-channel image will be interpreted as red-green-blue.
+  - A 4-channel image will be interpreted as red-green-blue-alpha.
+  - Any N-channel image with more than 4 will be interpreted one channel at a time (as gray) with a command to step to the next channel.
 2. Launch the viewer `volspy-viewer zebra-d19-03b-D.ome.tiff`
 3. Interact with the viewer
   - Press the `ESC` key when you have had enough.
-  - Press the 'h' key to get UI help printed to console output.
+  - Press the `?` key to get UI help printed to console output.
   - Click and drag volume with primary mouse button to rotate.
   - Press arrow keys with shift modifer to induce continuous rotation.
-  - Press number keys `1` to `9` to change intensity gain.
-  - Press keys 'f' and 'F' to adjust the floor-level image intensity
-    that is mapped to black.
-  - Press `c` key to cycle through color blending modes:
+  - Press number keys `1` to `9` to change intensity gain and with shift modifier to get reciprocal gain.
+  - Press keys `f` and `F` to adjust the floor-level image intensity that is mapped to black.
+  - Press `b` key to cycle through color blending modes:
     - Partial transparency
     - Additive blend
     - Maximum intensity projection
+  - Press `c` key to cycle through channels on images with more than 4 channels.
   - Click and drag vertically with secondary mouse button to drag a
     slicing plane through the volume. The plane is perpindicular to
     the viewing axis and its depth is controlled with the vertical
