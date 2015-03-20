@@ -130,8 +130,8 @@ class ImageCropper (object):
             assert len(channels) <= 4
             self.channels = channels
         else:
-            # default to first N channels u to 3 for RGB direct mapping
-            self.channels = tuple(range(0, min(self.pyramid[0].shape[3], 3)))
+            # default to first N channels u to 4 for RGBA direct mapping
+            self.channels = tuple(range(0, min(self.pyramid[0].shape[3], 4)))
         for c in self.channels:
             assert c >= 0
             assert c < self.pyramid[0].shape[3]

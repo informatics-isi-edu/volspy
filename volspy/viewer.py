@@ -41,7 +41,7 @@ class Canvas(app.Canvas):
 
         self.vol_cropper = ImageCropper(filename, maxtexsize, self._reform_image)
         nc = self.vol_cropper.pyramid[0].shape[3]
-        if nc > 3:
+        if nc > 4:
             print "%d channel image encountered, switching to single-channel mode" % nc
             self.vol_channels = (0,)
         else:
