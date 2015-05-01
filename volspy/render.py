@@ -450,11 +450,11 @@ class VolumeRenderer (object):
         if frag_glsl_dicts is None:
             # supply different ray blending math
             frag_glsl_dicts = [
-                dict(blendstmt=blendstmt)
-                for blendstmt in [
-                    _transparent_blend,
-                    _additive_blend,
-                    _maxintensity_blend
+                dict(blendstmt=blendstmt, desc=desc)
+                for blendstmt, desc in [
+                    (_transparent_blend, 'Linear transparency blend.'),
+                    (_additive_blend, 'Additive blend.'),
+                    (_maxintensity_blend, 'Maximum-intensity projection.')
                     ]
                 ]
 

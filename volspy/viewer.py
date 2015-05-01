@@ -70,6 +70,13 @@ class Canvas(app.Canvas):
             vol_interp=self._vol_interp
             )
 
+        self.toggle_color_mode.__func__._keydocs = {
+            'B': 'Cycle through color blending modes %s.' % [
+                frag.get('desc', 'undocumented')
+                for frag in self.volume_renderer.frag_glsl_dicts
+            ]
+        }
+        
         self._timer = None
 
         self.fps_t0 = datetime.datetime.now()
