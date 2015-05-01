@@ -129,7 +129,8 @@ def load_tiff(fname):
         elif pos == 0:
             pass
         elif data.ndim == 3:
-            pass
+            data = data[None,...]
+            axes = 'C' + axes
         else:
             raise NotImplementedError('Unexpected %d-dimension TIFF without C axis.' % data.ndim)
 
