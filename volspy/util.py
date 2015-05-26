@@ -134,8 +134,6 @@ class TiffLazyNDArray (object):
         assert reduce(lambda a,b: a*b, self.stack_shape, 1) == len(tfimg.pages), "TIFF page count mismatch to stack shape"
         assert tfimg.shape[self.stack_ndim:] == page0.shape, "TIFF page packing structure not understood"
 
-        print "TiffLazyNDArray.__init__ %s = (%s + %s).transpose(%s)" % (self.shape, self.stack_shape, self.page_shape, self.transposition)
-        
         if self.tf.is_ome:
             # get OME-TIFF XML metadata
             p = list(self.tf)[0]
@@ -169,7 +167,6 @@ class TiffLazyNDArray (object):
     def __getitem__(self, key):
         assert isinstance(key, tuple)
         assert len(key) >= self.ndim
-        print "__getitem__(%s)" % (key,)
 
         tfimg = self.tf.series[0]
         # determine slicing plan
@@ -213,30 +210,24 @@ class TiffLazyNDArray (object):
 
         # skip fake dimensions for intermediate buffer
         buffer_plan = [p for p in output_plan if p[0] is not None]
-        print "__getitem__ buffer plan", buffer_plan
 
         # input will be untransposed with dimension in TIFF order
         input_plan = list(buffer_plan)
         input_plan.sort(key=lambda p: p[0])
         assert len(input_plan) == self.ndim
-        print "__getitem__ input plan", input_plan
 
         # buffer may have fewer dimensions than input slicing due to integer keys
         buffer_shape = tuple(p[1] for p in input_plan if p[1] is not None)
-        print "__getitem__ buffer shape", buffer_shape
-        
         buffer = np.empty(buffer_shape, self.dtype)
 
         # generate page-by-page slicing
         stack_plan = input_plan[0:self.stack_ndim]
         page_plan = input_plan[self.stack_ndim:]
-        print "__getitem__ input stack/page plans", stack_plan, page_plan
 
         def generate_io_slices(stack_plan, page_plan):
             if stack_plan:
                 tf_axis, size, in_slice, out_slice = stack_plan[0]
                 if isinstance(in_slice, slice):
-                    print 'in_slice', in_slice
                     for x in range(in_slice.start, in_slice.stop):
                         for outslc, inslc in generate_io_slices(stack_plan[1:], page_plan):
                             yield ((x - in_slice.start,) + outslc, (x,) + inslc)
@@ -252,7 +243,6 @@ class TiffLazyNDArray (object):
             reduce(lambda a,b: a*b, self.stack_shape[i+1:], 1)
             for i in range(self.stack_ndim)
         ]
-        print "__getitem__ stack spans", stack_spans
 
         # perform actual pixel I/O
         for out_slicing, in_slicing in generate_io_slices(stack_plan, page_plan):
@@ -272,7 +262,6 @@ class TiffLazyNDArray (object):
             buffer_axes[tf_axis] = buf_axis
         buffer_transposition = tuple(buffer_axes[a] for a in self.transposition if buffer_axes[a] is not None)
         buffer = buffer.transpose(buffer_transposition)
-        print "__getitem__ transposed buffer shape", buffer.shape
         
         # inject fake dimensions before returning
         out_slicing = []
@@ -281,7 +270,6 @@ class TiffLazyNDArray (object):
                 out_slicing.append(None)
             elif size is not None:
                 out_slicing.append(slice(None))
-        print out_slicing
         return buffer[tuple(out_slicing)]
         
     def transpose(self, *transposition):
