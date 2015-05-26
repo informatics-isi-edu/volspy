@@ -332,22 +332,25 @@ def load_tiff(fname):
 
        Keep temporarily for backward-compatibility...
     """
-    md = None
-
     data = TiffLazyNDArray(fname)
     z_microns, y_microns, x_microns = data.micron_spacing
-
     md = ImageMetadata(x_microns, y_microns, z_microns, data.axes)
+    # configure our preferred axes ordering
+    data = data.transpose(*[d for d in map(data.axes.find, 'TCZYX') if d >= 0])
+    
+    projection = []
 
-    if data.ndim == 3:
-        assert data.axes == 'ZYX'
-        # add fake color
-        data = data[None,:,:,:]
-    elif data.ndim == 4:
-        assert data.axes == 'CZYX'
-    elif data.ndim == 5:
-        assert data.axes == 'TZCYX'
-        data = data.transpose(0,2,1,3,4)[0,:,:,:,:]
+    if 'T' in data.axes and data.shape[0] == 1:
+        projection.append(0) # remove trivial T dimension
+
+    if 'C' not in data.axes:
+        projection.append(None) # add trivial C dimension
+    elif projection:
+        projection.append(slice(None))
+
+    if projection:
+        projection += [slice(None) for d in 'ZYX']
+        data = data[tuple(projection)]
         
     return data, md
 
