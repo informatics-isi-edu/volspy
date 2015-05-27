@@ -39,8 +39,11 @@ def bin_reduce(data, axes_s):
        type.
 
     """
-    d1 = data
-
+    if hasattr(data, 'force'):
+        d1 = data.force()
+    else:
+        d1 = data
+        
     # sort axes by stride distance to optimize for locality
     # doesn't seem to make much difference on modern systems...
     axes = [ (axis, d1.strides[axis]) for axis in range(d1.ndim) ]
@@ -160,7 +163,11 @@ class TiffLazyNDArray (object):
     def _plan_slicing(self, key):
         assert isinstance(key, tuple)
         tfimg = self.tf.series[0]
-        output_plan = [] # [(tf_axis, size, in_slice, out_slice)...]
+        output_plan = [
+            (tf_axis, in_slice, out_slice)
+            for tf_axis, in_slice, out_slice in self.output_plan
+            if out_slice is None and in_slice is not None
+        ]
 
         current_plan = [ # FIFO of dimensions projected by key
             (tf_axis, in_slice, out_slice)
@@ -184,9 +191,8 @@ class TiffLazyNDArray (object):
                     if isinstance(in_slice, slice):
                         in_slice = elem + in_slice.start
                     else:
-                        in_slice = None
+                        continue
                     out_slice = None
-                    size = None
                 elif isinstance(elem, slice):
                     assert elem.step is None, "only default stepping is supported"
                     # modify sliced dimension
@@ -212,11 +218,12 @@ class TiffLazyNDArray (object):
     def __getitem__(self, key):
         tfimg = self.tf.series[0]
         output_plan = self._plan_slicing(key)
+        print output_plan
         
         # skip fake dimensions for intermediate buffer
         buffer_plan = [
             (tf_axis, in_slice, out_slice)
-            for tf_axis, in_slice, out_slice in self.output_plan
+            for tf_axis, in_slice, out_slice in output_plan
             if in_slice is not None
         ]
 
@@ -224,7 +231,7 @@ class TiffLazyNDArray (object):
         input_plan = list(buffer_plan)
         input_plan.sort(key=lambda p: p[0])
         assert len(input_plan) == len(tfimg.shape)
-
+        
         # buffer may have fewer dimensions than input slicing due to integer keys
         buffer_shape = tuple([
             out_slice.stop
@@ -241,7 +248,7 @@ class TiffLazyNDArray (object):
         # generate page-by-page slicing
         stack_plan = input_plan[0:self.stack_ndim]
         page_plan = input_plan[self.stack_ndim:]
-
+        
         def generate_io_slices(stack_plan, page_plan):
             if stack_plan:
                 tf_axis, in_slice, out_slice = stack_plan[0]
@@ -255,7 +262,7 @@ class TiffLazyNDArray (object):
                 else:
                     assert False
             else:
-                yield tuple(p[2] for p in page_plan), tuple(p[1] for p in page_plan)
+                yield tuple(p[2] for p in page_plan if p[2] is not None), tuple(p[1] for p in page_plan)
                 
         stack_spans = [
             reduce(lambda a,b: a*b, self.stack_shape[i+1:], 1)
@@ -280,12 +287,16 @@ class TiffLazyNDArray (object):
         in_slicing = [
             in_slice
             for tf_axis, in_slice, out_slice in output_plan
-            if not isinstance(in_slice, int)
+            if isinstance(in_slice, slice) or in_slice is None
         ]
         return buffer[tuple(in_slicing)]
         
     def transpose(self, *transposition):
-        output_plan = []
+        output_plan = [
+            (tf_axis, in_slice, out_slice)
+            for tf_axis, in_slice, out_slice in self.output_plan
+            if out_slice is None
+        ]
         current_plan = [ # FIFO of dimensions projected by key
             (tf_axis, in_slice, out_slice)
             for tf_axis, in_slice, out_slice in self.output_plan
@@ -384,7 +395,7 @@ def load_tiff(fname):
         md = ImageMetadata(x_microns, y_microns, z_microns, data.axes)
     except AttributeError:
         md = None
-    return data.force(), md
+    return data, md
 
 def load_image(fname):
     """Load named file, returning (data, metadata).
