@@ -38,6 +38,7 @@ interpretation of the volume data.
 
 """
 
+import os
 import numpy as np
 import math
 
@@ -66,7 +67,24 @@ class ImageCropper (object):
             self.Zaspect = 1.0
 
         I = reform_data(I, self.meta)
-        
+
+        # temporary pre-processing hacks to investigate XY-correlated sensor artifacts...
+        try:
+            ntile = int(os.getenv('VOLSPY_ZNOISE_PERCENTILE'))
+            I = I.force()
+            zerofield = np.percentile(I, ntile, axis=0)
+            print 'Image %d percentile value over Z-axis ranges [%f,%f]' % (ntile, zerofield.min(), zerofield.max())
+            I -= zerofield
+            print 'Image offset by %d percentile XY value to new range [%f,%f]' % (ntile, I.min(), I.max())
+            try:
+                zero = float(os.getenv('VOLSPY_ZNOISE_ZERO_LEVEL'))
+                I = I * (I >= 0.)
+                print 'Image clamped to range [%f,%f]' % (I.min(), I.max())
+            except:
+                pass
+        except:
+            pass
+            
         # store as base of pyramid
         self.pyramid = [ I ]
         self._extend_pyramid()
