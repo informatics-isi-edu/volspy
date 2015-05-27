@@ -128,8 +128,6 @@ class TiffLazyNDArray (object):
                 for a in range(len(tfimg.shape))
             ]
 
-        print "TiffLazyNDArray.__init__: %s=%sx%s output_plan %s" % (self.shape, self.stack_shape, page0.shape, self.output_plan)
-            
         if self.tf.is_ome:
             # get OME-TIFF XML metadata
             p = list(self.tf)[0]
@@ -218,7 +216,6 @@ class TiffLazyNDArray (object):
     def __getitem__(self, key):
         tfimg = self.tf.series[0]
         output_plan = self._plan_slicing(key)
-        print output_plan
         
         # skip fake dimensions for intermediate buffer
         buffer_plan = [
