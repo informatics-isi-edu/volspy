@@ -39,16 +39,12 @@ def bin_reduce(data, axes_s):
        type.
 
     """
-    if hasattr(data, 'force'):
-        d1 = data.force()
-    else:
-        d1 = data
+    d1 = data
         
     # sort axes by stride distance to optimize for locality
     # doesn't seem to make much difference on modern systems...
     axes = [ (axis, d1.strides[axis]) for axis in range(d1.ndim) ]
     axes.sort(key=lambda p: p[1])
-
     assert len(axes_s) == data.ndim
 
     # reduce one axis at a time to shrink work for subsequent axes
@@ -67,7 +63,7 @@ def bin_reduce(data, axes_s):
                 + [ slice(None) for i in range(d1.ndim - axis - 1) ]
             )
         ].astype(np.float32, copy=False)
-                
+        
         for step in range(1, s):
             a += d1[ 
                 tuple(
@@ -124,7 +120,7 @@ class TiffLazyNDArray (object):
             self.output_plan = _output_plan
         else:
             self.output_plan = [
-                (a, slice(0, self.tf_shape[a]), slice(0, self.tf_shape[a]))
+                (a, slice(0, self.tf_shape[a], 1), slice(0, self.tf_shape[a], 1))
                 for a in range(len(tfimg.shape))
             ]
 
@@ -177,14 +173,15 @@ class TiffLazyNDArray (object):
             if elem is None:
                 # inject fake output dimension
                 tf_axis = None
-                out_slice = slice(0,1)
+                out_slice = slice(0,1,1)
                 in_slice = None
             else:
                 tf_axis, in_slice, out_slice = current_plan.pop(0)
                 if isinstance(elem, int):
                     # collapse projected dimension
-                    assert elem >= 0, "negative indexing not supported"
-                    if elem >= out_slice.stop:
+                    if elem < 0:
+                        elem += out_slice.stop
+                    if elem >= out_slice.stop or elem < 0:
                         raise IndexError('index %d out of range [0,%d)' % (elem, size))
                     if isinstance(in_slice, slice):
                         in_slice = elem + in_slice.start
@@ -192,21 +189,35 @@ class TiffLazyNDArray (object):
                         continue
                     out_slice = None
                 elif isinstance(elem, slice):
-                    assert elem.step is None, "only default stepping is supported"
                     # modify sliced dimension
-                    start = elem.start or 0
+                    if elem.step is None:
+                        step = 1
+                    else:
+                        step = elem.step
+                    assert step > 0, "only positive stepping is supported"
+                    if elem.start is None:
+                        start = 0
+                    elif elem.start < 0:
+                        start = elem.start + out_slice.stop
+                    else:
+                        start = elem.start
                     if elem.stop is None:
                         stop = out_slice.stop
+                    elif elem.stop < 0:
+                        stop = elem.stop + out_slice.stop
                     else:
-                        stop = min(elem.stop, out_slice.stop)
-                    assert start >= 0, "negative indexing not supported"
-                    assert stop >= 0, "negative indexing not supported"
+                        stop = elem.stop
+                    start = max(min(start, out_slice.stop), 0)
+                    stop = max(min(stop, out_slice.stop), 0)
                     assert start < stop, "empty slicing not supported"
                     if isinstance(in_slice, slice):
-                        in_slice = slice(in_slice.start + start, in_slice.start + stop)
+                        in_slice = slice(in_slice.start + start, in_slice.start + stop, in_slice.step * step)
+                        w = in_slice.stop - in_slice.start
+                        w = w/in_slice.step + (w%in_slice.step and 1 or 0)
+                        out_slice = slice(0,w,1)
                     else:
                         in_slice = None
-                    out_slice = slice(0, stop - start)
+                        out_slice = slice(0,1,1)
             output_plan.append((tf_axis, in_slice, out_slice))
 
         assert not current_plan, "slicing key must project all image dimensions"
@@ -280,13 +291,13 @@ class TiffLazyNDArray (object):
             if isinstance(in_slice, slice)
         ]
         buffer = buffer.transpose(tuple(transposition))
-        
-        in_slicing = [
-            in_slice
+
+        out_slicing = [
+            isinstance(in_slice, slice) and slice(None) or None
             for tf_axis, in_slice, out_slice in output_plan
             if isinstance(in_slice, slice) or in_slice is None
         ]
-        return buffer[tuple(in_slicing)]
+        return buffer[tuple(out_slicing)]
         
     def transpose(self, *transposition):
         output_plan = [
@@ -328,6 +339,18 @@ class TiffLazyNDArray (object):
     def axes(self):
         return ''.join(p[0] is not None and self.tf_axes[p[0]] or 'Q' for p in self.output_plan if p[2] is not None)
 
+    @property
+    def strides(self):
+        plan = [(p[0], p[2].stop) for p in self.output_plan if p[2] is not None]
+        plan = [(i,) + plan[i] for i in range(len(plan))]
+        plan.sort(key=lambda p: p[1])
+        strides = []
+        for i in range(len(plan)):
+            strides.append((plan[i][0], reduce(lambda a, b: a*b, [p[2] for p in plan[i+1:]], 1)))
+        strides.sort(key=lambda p: p[0])
+        strides = [p[1] for p in strides]
+        return strides
+        
     @lazyattr
     def min_max(self):
         amin = None
