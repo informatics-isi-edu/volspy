@@ -369,9 +369,21 @@ def load_tiff(fname):
 
        Keep temporarily for backward-compatibility...
     """
-    data = canonicalize(TiffLazyNDArray(fname))
-    z_microns, y_microns, x_microns = data.micron_spacing
-    md = ImageMetadata(x_microns, y_microns, z_microns, data.axes)
+    data = TiffLazyNDArray(fname)
+    try:
+        data = canonicalize(data)
+    except:
+        # special case for raw TIFF (not LSM, not OME)
+        if data.ndim == 3:
+            data = data[(None,slice(None),slice(None),slice(None))] # add fake color dimension
+        elif data.ndim == 4 and data.shape[3] < 4:
+            data = data.transpose(3,0,1,2) # transpose color
+
+    try:
+        z_microns, y_microns, x_microns = data.micron_spacing
+        md = ImageMetadata(x_microns, y_microns, z_microns, data.axes)
+    except AttributeError:
+        md = None
     return data.force(), md
 
 def load_image(fname):
