@@ -185,7 +185,7 @@ class TiffLazyNDArray (object):
                     # collapse projected dimension
                     assert elem >= 0, "negative indexing not supported"
                     if elem >= out_slice.stop:
-                        raise IndexError('index %d out of range [0,%d)' % (elem, size))
+                        raise IndexError('index %d out of range [0,%d)' % (elem, out_slice.stop))
                     if isinstance(in_slice, slice):
                         in_slice = elem + in_slice.start
                     else:
@@ -282,7 +282,7 @@ class TiffLazyNDArray (object):
         buffer = buffer.transpose(tuple(transposition))
         
         in_slicing = [
-            in_slice
+            in_slice is not None and out_slice or in_slice
             for tf_axis, in_slice, out_slice in output_plan
             if isinstance(in_slice, slice) or in_slice is None
         ]
