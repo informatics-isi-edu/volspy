@@ -182,7 +182,7 @@ class TiffLazyNDArray (object):
                     if elem < 0:
                         elem += out_slice.stop
                     if elem >= out_slice.stop or elem < 0:
-                        raise IndexError('index %d out of range [0,%d)' % (elem, size))
+                        raise IndexError('index %d out of range [0,%d)' % (elem, out_slice.stop))
                     if isinstance(in_slice, slice):
                         in_slice = elem + in_slice.start
                     else:
@@ -291,9 +291,9 @@ class TiffLazyNDArray (object):
             if isinstance(in_slice, slice)
         ]
         buffer = buffer.transpose(tuple(transposition))
-
+        
         out_slicing = [
-            isinstance(in_slice, slice) and slice(None) or None
+            in_slice is not None and out_slice or in_slice
             for tf_axis, in_slice, out_slice in output_plan
             if isinstance(in_slice, slice) or in_slice is None
         ]
