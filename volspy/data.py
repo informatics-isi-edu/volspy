@@ -51,23 +51,23 @@ class ImageCropper (object):
 
     def __init__(self, filename, maxdim=None, reform_data=None):
         if reform_data is None:
-            reform_data = lambda x, meta: x
+            reform_data = lambda x, meta: (x, (1,1,1))
 
         I, self.meta = load_image(filename)
 
+        try:
+            voxel_size = I.micron_spacing
+        except AttributeError:
+            voxel_size = (1., 1., 1.)
+            
         self.maxdim = maxdim
 
-        # interleave channels
         I = I.transpose(1,2,3,0)
+        I, view_reduction = reform_data(I, self.meta)
+        voxel_size = map(lambda a, b: a*b, voxel_size, view_reduction)
 
-        # correct aspect ratio if available
-        if self.meta is not None:
-            self.Zaspect = self.meta.z_microns / self.meta.x_microns
-        else: 
-            self.Zaspect = 1.0
-
-        I = reform_data(I, self.meta)
-
+        self.Zaspect = voxel_size[0] / voxel_size[2]
+            
         # temporary pre-processing hacks to investigate XY-correlated sensor artifacts...
         try:
             ntile = int(os.getenv('VOLSPY_ZNOISE_PERCENTILE'))
