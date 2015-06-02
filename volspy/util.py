@@ -62,7 +62,7 @@ def bin_reduce(data, axes_s):
                 + [ slice(0, 1-s, s) ]
                 + [ slice(None) for i in range(d1.ndim - axis - 1) ]
             )
-        ].astype(np.float32, copy=False)
+        ].astype(np.float32, copy=True)
         
         for step in range(1, s):
             a += d1[ 
