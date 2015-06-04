@@ -116,42 +116,6 @@ _color_gain = """
        col_smp = clamp( u_gain * (col_smp - u_floorlvl), 0.0, 1.0);
 """
 
-# map single-channel to spectrum using linear ramps
-_1ch_color = """
-       float val = clamp( u_gain * (col_smp.r - u_floorlvl), 0.0, 1.0);
-       if (val <= 1.0/6.0) {
-          col_smp.r = 0.0;
-          col_smp.g = 0.0;
-          col_smp.b = val * 6.0;
-       }
-       else if (val <= 2.0/6.0) {
-          col_smp.r = 0.0;
-          col_smp.g = (val - 1.0/6.0) * 6.0;
-          col_smp.b = 1.0;
-       }
-       else if (val <= 3.0/6.0) {
-          col_smp.r = 0.0;
-          col_smp.g = 1.0;
-          col_smp.b = 1.0 - (val - 2.0/6.0) * 6.0;
-       }
-       else if (val <= 4.0/6.0) {
-          col_smp.r = (val - 3.0/6.0) * 6.0;
-          col_smp.g = 1.0;
-          col_smp.b = 0.0;
-       }
-       else if (val <= 5.0/6.0) {
-          col_smp.r = 1.0;
-          col_smp.g = 1.0 - (val - 4.0/6.0) * 6.0;
-          col_smp.b = 0.0;
-       }
-       else {
-          col_smp.r = 1.0;
-          col_smp.g = 0.0;
-          col_smp.b = (val - 5.0/6.0) * 6.0;
-       }
-       col_smp = col_smp * val;
-"""
-
 # compute alpha as (clamped) linear function of RGB
 _linear_alpha = """
        col_smp.a = clamp(
@@ -159,10 +123,6 @@ _linear_alpha = """
           0.0, 
           1.0
        );
-"""
-
-_1ch_alpha = """
-       col_smp.a = val * 0.5;
 """
 
 # accumulate voxels with alpha transparency (front-to-back)
@@ -229,9 +189,6 @@ void main()
 {
     vec4 col_smp;
     vec4 col_packed_smp;
-    vec4 collo_smp;
-    vec4 texcoordhi;
-    vec4 texcoordlo;
     vec4 texcoord;
 
     texcoord = texture2D(u_entry_texture, v_texcoord);
