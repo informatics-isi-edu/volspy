@@ -180,7 +180,7 @@ Resize viewing window using native window-manager controls.
         self.scale = np.eye(4, dtype=np.float32)
         self.anti_scale = np.eye(4, dtype=np.float32)
 
-        self.gain = 8.0
+        self.gain = 1.0
         self.zoom = 1.0
         self.floorlvl = 0.1
 
