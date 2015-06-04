@@ -50,9 +50,6 @@ from .geometry import make_cube_clipped
 class ImageCropper (object):
 
     def __init__(self, filename, maxdim=None, reform_data=None):
-        if reform_data is None:
-            reform_data = lambda x, meta: (x, (1,1,1))
-
         I, self.meta = load_image(filename)
 
         try:
@@ -63,7 +60,11 @@ class ImageCropper (object):
         self.maxdim = maxdim
 
         I = I.transpose(1,2,3,0)
-        I, view_reduction = reform_data(I, self.meta)
+        if reform_data is not None:
+            I, view_reduction = reform_data(I, self.meta)
+        else:
+            view_reduction = (1,1,1)
+            
         voxel_size = map(lambda a, b: a*b, voxel_size, view_reduction)
 
         self.Zaspect = voxel_size[0] / voxel_size[2]

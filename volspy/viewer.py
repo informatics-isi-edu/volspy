@@ -28,7 +28,7 @@ def keydoc(details):
 class Canvas(app.Canvas):
 
     def _reform_image(self, I, meta):
-        return I
+        return I, (1, 1, 1)
 
     _frag_glsl_dicts = None
     _vol_interp = 'linear'
