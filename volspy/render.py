@@ -196,6 +196,8 @@ void main()
 %(repack)s
 %(colorxfer)s
 
+    col_smp = col_smp * col_smp.a * 4.0;
+    col_smp.a = 1.0;
     gl_FragColor = col_smp;
 }
 
