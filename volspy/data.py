@@ -60,21 +60,27 @@ class ImageCropper (object):
             voxel_size = I.micron_spacing
         except AttributeError:
             voxel_size = (1., 1., 1.)
+
+        try:
+            view_grid_microns = tuple(map(float, os.getenv('ZYX_VIEW_GRID').split(",")))
+            assert len(view_grid_microns) == 3
+        except:
+            view_grid_microns = (0.25, 0.25, 0.25)
+        print "Using %s micron view grid. Override with ZYX_VIEW_GRID='float,float,float'" % (view_grid_microns,)
+
+        view_reduction = tuple(map(lambda vs, ps: max(int(ps/vs), 1), voxel_size, view_grid_microns))
             
         # temporary pre-processing hacks to investigate XY-correlated sensor artifacts...
         try:
-            ntile = int(os.getenv('VOLSPY_ZNOISE_PERCENTILE'))
+            ntile = int(os.getenv('ZNOISE_PERCENTILE'))
             I = I.force()
             zerofield = np.percentile(I, ntile, axis=1)
             print 'Image %d percentile value over Z-axis ranges [%f,%f]' % (ntile, zerofield.min(), zerofield.max())
             I -= zerofield
             print 'Image offset by %d percentile XY value to new range [%f,%f]' % (ntile, I.min(), I.max())
-            try:
-                zero = float(os.getenv('VOLSPY_ZNOISE_ZERO_LEVEL'))
-                I = I * (I >= 0.)
-                print 'Image clamped to range [%f,%f]' % (I.min(), I.max())
-            except:
-                pass
+            zero = float(os.getenv('ZNOISE_ZERO_LEVEL'), 0)
+            I = I * (I >= 0.)
+            print 'Image clamped to range [%f,%f]' % (I.min(), I.max())
         except:
             pass
             
@@ -89,13 +95,32 @@ class ImageCropper (object):
             setattr(I, 'micron_spacing', voxel_size)
             
         if reform_data is not None:
-            I, view_reduction = reform_data(I, self.meta)
-        else:
-            view_reduction = (1,1,1)
+            I = reform_data(I, self.meta, view_reduction)
             
         voxel_size = map(lambda a, b: a*b, voxel_size, view_reduction)
-
         self.Zaspect = voxel_size[0] / voxel_size[2]
+
+        # allow user to select a bounding box region of interest
+        bbox = os.getenv('ZYX_SLICE')
+        if bbox:
+            bbox = bbox.split(",")
+            assert len(bbox) == 3, "ZYX_SLICE must have comma-separated slices for 3 axes Z,Y,X"
+            bbox = [s.split(":") for s in bbox]
+            for p in bbox:
+                assert len(p) == 2, "ZYX_SLICE must have START:STOP pair for each axial slice"
+            for start, stop in bbox:
+                assert int(start) >= 0, "ZYX_SLICE START must be 0 or greater"
+                assert int(stop) >= 1, "ZYX_SLICE STOP must be 1 or greater"
+            bbox = tuple(map(
+                lambda slc, vr: slice(int(slc[0])/vr, int(slc[1])/vr),
+                bbox,
+                view_reduction
+            )) + (slice(None),)
+            datamin = I.min()
+            datamax = I.max()
+            I = I[bbox]
+            I[0,0,0,0] = datamin
+            I[-1,-1,-1,0] = datamax
             
         # store as base of pyramid
         self.pyramid = [ I ]

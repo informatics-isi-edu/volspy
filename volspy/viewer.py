@@ -14,6 +14,7 @@ from vispy import app
 
 from .data import ImageCropper
 from .render import maxtexsize, VolumeRenderer
+from .util import bin_reduce
 
 
 #gloo.gl.use_gl('pyopengl debug')
@@ -27,8 +28,8 @@ def keydoc(details):
         
 class Canvas(app.Canvas):
 
-    def _reform_image(self, I, meta):
-        return I, (1, 1, 1)
+    def _reform_image(self, I, meta, view_reduction):
+        return bin_reduce(I, view_reduction + (1,))
 
     _frag_glsl_dicts = None
     _vol_interp = 'linear'
