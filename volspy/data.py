@@ -47,6 +47,10 @@ from vispy import gloo
 from .util import load_image, bin_reduce
 from .geometry import make_cube_clipped
 
+class wrapper (np.ndarray):
+    """Subtype to allow extra attributes"""
+    pass
+
 class ImageCropper (object):
 
     def __init__(self, filename, maxdim=None, reform_data=None):
@@ -57,23 +61,11 @@ class ImageCropper (object):
         except AttributeError:
             voxel_size = (1., 1., 1.)
             
-        self.maxdim = maxdim
-
-        I = I.transpose(1,2,3,0)
-        if reform_data is not None:
-            I, view_reduction = reform_data(I, self.meta)
-        else:
-            view_reduction = (1,1,1)
-            
-        voxel_size = map(lambda a, b: a*b, voxel_size, view_reduction)
-
-        self.Zaspect = voxel_size[0] / voxel_size[2]
-            
         # temporary pre-processing hacks to investigate XY-correlated sensor artifacts...
         try:
             ntile = int(os.getenv('VOLSPY_ZNOISE_PERCENTILE'))
             I = I.force()
-            zerofield = np.percentile(I, ntile, axis=0)
+            zerofield = np.percentile(I, ntile, axis=1)
             print 'Image %d percentile value over Z-axis ranges [%f,%f]' % (ntile, zerofield.min(), zerofield.max())
             I -= zerofield
             print 'Image offset by %d percentile XY value to new range [%f,%f]' % (ntile, I.min(), I.max())
@@ -85,6 +77,25 @@ class ImageCropper (object):
                 pass
         except:
             pass
+            
+        self.maxdim = maxdim
+
+        I = I.transpose(1,2,3,0)
+        if isinstance(I, np.ndarray):
+            # temporarily maintain micron_spacing after percentile hack above...
+            I2 = wrapper(shape=I.shape, dtype=I.dtype)
+            I2[:,:,:,:] = I[:,:,:,:]
+            I = I2
+            setattr(I, 'micron_spacing', voxel_size)
+            
+        if reform_data is not None:
+            I, view_reduction = reform_data(I, self.meta)
+        else:
+            view_reduction = (1,1,1)
+            
+        voxel_size = map(lambda a, b: a*b, voxel_size, view_reduction)
+
+        self.Zaspect = voxel_size[0] / voxel_size[2]
             
         # store as base of pyramid
         self.pyramid = [ I ]
