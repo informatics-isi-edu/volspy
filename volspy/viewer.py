@@ -8,12 +8,12 @@ import numpy as np
 
 import datetime
 
-from vispy.util.transforms import scale, translate, rotate, perspective, ortho
+from vispy.util.transforms import perspective, ortho
 from vispy import gloo
 from vispy import app
 
 from .data import ImageCropper
-from .render import maxtexsize, VolumeRenderer
+from .render import maxtexsize, VolumeRenderer, rotate, translate, scale
 from .util import bin_reduce
 
 

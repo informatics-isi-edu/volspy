@@ -15,11 +15,41 @@ inside the volume bounding box.
 
 import numpy as np
 
-from vispy.util.transforms import rotate, perspective, ortho
+import vispy.util.transforms
+from vispy.util.transforms import ortho
 from vispy import gloo
 
 import os
 
+def rotate(M, angle, x, y, z):
+    """Apply degrees of rotation about vector.
+
+       Backward-compatibility to older vispy routine.
+
+    """
+    R = vispy.util.transforms.rotate(angle, np.array((x, y, z), dtype=np.float32))
+    M[...] = np.dot(M, R)
+    return M
+
+def translate(M, x, y, z):
+    """Apply translation.
+
+       Backward-compatibility to older vispy routine.
+
+    """
+    T = vispy.util.transforms.translate((x, y, z), dtype=np.float32)
+    M[...] = np.dot(M, T)
+    return M
+
+def scale(M, x, y, z):
+    """Apply non-uniform scaling along axes.
+
+       Backward-compatibility to older vispy routine.
+
+    """
+    S = vispy.util.transforms.scale((x, y, z), dtype=np.float32)
+    M[...] = np.dot(M, S)
+    return M
 
 # downsample volume to fit environmental limit?
 maxtexsize = float(os.getenv('MAX_3D_TEXTURE_WIDTH', 768))
