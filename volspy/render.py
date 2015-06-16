@@ -51,8 +51,8 @@ def scale(M, x, y, z):
     M[...] = np.dot(M, S)
     return M
 
-# downsample volume to fit environmental limit?
-maxtexsize = float(os.getenv('MAX_3D_TEXTURE_WIDTH', 768))
+# hueristic to configure ray-casting sampling pitch
+maxtexsize = float(os.getenv('MAX_3D_TEXTURE_WIDTH', 1024))
 
 # center on origin and change box aspect ratio to match image
 cube_model = np.eye(4, dtype=np.float32)
