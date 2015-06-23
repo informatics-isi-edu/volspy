@@ -222,10 +222,14 @@ void main()
     vec4 texcoord;
 
     texcoord = texture2D(u_entry_texture, v_texcoord);
-    col_packed_smp = texture3D(u_data_texture, texcoord.xyz / texcoord.w);
-%(repack)s
-%(colorxfer)s
-
+    if (any(notEqual(texcoord.xyz, vec3(0)))) {
+       col_packed_smp = texture3D(u_data_texture, texcoord.xyz / texcoord.w);
+       %(repack)s
+       %(colorxfer)s
+    }
+    else {
+       col_smp = vec4(0);
+    }
     col_smp = col_smp * col_smp.a * 4.0;
     col_smp.a = 1.0;
     gl_FragColor = col_smp;
