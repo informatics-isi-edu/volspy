@@ -212,6 +212,7 @@ class VolumeSliceProgram (VolumeProgram):
         return """
 uniform sampler3D u_data_texture;
 uniform sampler2D u_entry_texture;
+uniform vec4 u_picked;
 %(uniforms)s
 varying vec2 v_texcoord;
 
@@ -306,6 +307,7 @@ class VolumeRayCastProgram (VolumeProgram):
 uniform sampler3D u_data_texture;
 uniform sampler2D u_entry_texture;
 uniform sampler2D u_exit_texture;
+uniform vec4 u_picked;
 %(uniforms)s
 varying vec2 v_texcoord;
 
@@ -419,7 +421,7 @@ void main()
 
 class VolumeRenderer (object):
 
-    def __init__(self, vol_cropper, vol_texture, num_channels, vol_view, fbo_size=(1024, 1024), zoom=1.0, frag_glsl_dicts=None, vol_interp='linear'):
+    def __init__(self, vol_cropper, vol_texture, num_channels, vol_view, fbo_size=(1024, 1024), zoom=1.0, frag_glsl_dicts=None, pick_glsl_index=None, vol_interp='linear'):
         self.vol_cropper = vol_cropper
 
         self.vol_texture = vol_texture
@@ -436,9 +438,11 @@ class VolumeRenderer (object):
         fbo_format = 'rgba16'
         self.entry_texture = gloo.Texture2D(shape=(fbo_size + (4,)), internalformat=fbo_format)
         self.exit_texture = gloo.Texture2D(shape=(fbo_size + (4,)), internalformat=fbo_format)
+        self.pick_texture = gloo.Texture2D(shape=(1, 1, 4), internalformat='rgba')
 
         self.entry_texture.interpolation = 'linear'
         self.exit_texture.interpolation = 'linear'
+        self.pick_texture.interpolation = 'nearest'
     
         if frag_glsl_dicts is None:
             # supply different ray blending math
@@ -450,6 +454,7 @@ class VolumeRenderer (object):
                     (_maxintensity_blend, 'Maximum-intensity projection.')
                     ]
                 ]
+            pick_glsl_index = None
 
         # build slicers and ray casters with GLSL code dictionaries
         self.prog_vol_slicers = map(
@@ -462,6 +467,7 @@ class VolumeRenderer (object):
             )
 
         self.frag_glsl_dicts = frag_glsl_dicts
+        self.pick_glsl_index = pick_glsl_index
 
         self.color_mode = 0
 
@@ -470,6 +476,7 @@ class VolumeRenderer (object):
         
         self.fbo_entry = gloo.FrameBuffer(self.entry_texture)
         self.fbo_exit = gloo.FrameBuffer(self.exit_texture)
+        self.fbo_pick = gloo.FrameBuffer(self.pick_texture)
         self.anti_view = None
         
     def set_color_mode(self, i=None):
@@ -514,7 +521,7 @@ class VolumeRenderer (object):
         self.prog_boundary['u_view'] = view
         self.anti_view = anti_view
 
-    def draw_volume(self, viewport, color_mask=(True, True, True, True)):
+    def draw_volume(self, viewport, color_mask=(True, True, True, True), pick=None):
         gloo.set_color_mask(True, True, True, True)
 
         with self.fbo_entry:
@@ -535,6 +542,32 @@ class VolumeRenderer (object):
             gloo.set_state(blend=False, depth_test=False, cull_face=True)
             self.prog_boundary.draw(self.volume_faces)
 
+        if pick is not None:
+            X, Y, W, H = viewport
+            x, y = pick
+            pickport = X-x, y-H-Y, W, H
+            if self.pick_glsl_index is not None:
+                glsl_index = self.pick_glsl_index
+            else:
+                glsl_index = self.color_mode
+
+            self.set_uniform('u_picked', (0, 0, 0, 0))
+                
+            with self.fbo_pick:
+                gloo.set_color_mask(* color_mask)
+                gloo.set_clear_color('black')
+                gloo.set_viewport(*pickport)
+                gloo.set_cull_face(mode='back')
+                gloo.clear(color=True, depth=False)
+                gloo.set_state(blend=False, depth_test=False, cull_face=True)
+                self.prog_ray_casters[glsl_index].draw()
+                pick_out = self.fbo_pick.read()[0,0,:]
+                
+            self.set_uniform('u_picked', pick_out / 255.0)
+        else:
+            pick_out = None
+            self.set_uniform('u_picked', (0, 0, 0, 0))
+            
         # cast rays based on entry/exit textures
         gloo.set_color_mask(* color_mask)
         gloo.set_clear_color('black')
@@ -544,9 +577,12 @@ class VolumeRenderer (object):
         gloo.set_state(blend=False, depth_test=False, cull_face=True)
         self.prog_ray_casters[self.color_mode].draw()
 
-    def draw_slice(self, viewport, color_mask=(True, True, True, True)):
-        gloo.set_color_mask(True, True, True, True)
+        return pick_out
 
+    def draw_slice(self, viewport, color_mask=(True, True, True, True), pick=None):
+        gloo.set_color_mask(True, True, True, True)
+        self.set_uniform('u_picked', (0, 0, 0, 0))
+            
         with self.fbo_entry:
             # draw the ray entry map via front-faces
             gloo.set_clear_color('black')

@@ -32,6 +32,7 @@ class Canvas(app.Canvas):
         return bin_reduce(I, view_reduction + (1,))
 
     _frag_glsl_dicts = None
+    _pick_glsl_index = None
     _vol_interp = 'linear'
 
     def __init__(self, filename, reset=True):
@@ -67,6 +68,7 @@ class Canvas(app.Canvas):
             np.eye(4, dtype=np.float32), # view
             (int(maxtexsize * 4), int(maxtexsize * 4)), # fbo_size
             frag_glsl_dicts=self._frag_glsl_dicts,
+            pick_glsl_index=self._pick_glsl_index,
             vol_interp=self._vol_interp
             )
 
@@ -311,7 +313,6 @@ Resize viewing window using native window-manager controls.
             return
 
         print "window resize", event.size
-        #self.size = event.size
         self.prev_size = event.size
 
         if float(width) / float(height) > 1.0:
@@ -536,7 +537,7 @@ Resize viewing window using native window-manager controls.
     def on_timer(self, event):
         self.update_view(True)
 
-    def on_draw(self, event, color_mask=(True, True, True, True)):
+    def on_draw(self, event, color_mask=(True, True, True, True), pick=None):
         if self.fps_count >= 10:
             t1 = datetime.datetime.now()
             print "%f FPS" % (10.0 / (t1 - self.fps_t0).total_seconds())
@@ -549,7 +550,7 @@ Resize viewing window using native window-manager controls.
         #print 'draw %d' % self.frame
         self.frame += 1
         if self.slice_mode:
-            self.volume_renderer.draw_slice(self.viewport1, color_mask=color_mask)
+            return self.volume_renderer.draw_slice(self.viewport1, color_mask=color_mask, pick=pick)
         else:
-            self.volume_renderer.draw_volume(self.viewport1, color_mask=color_mask)
+            return self.volume_renderer.draw_volume(self.viewport1, color_mask=color_mask, pick=pick)
 
