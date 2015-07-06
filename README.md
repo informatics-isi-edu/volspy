@@ -25,26 +25,17 @@ Volspy has two usage scenarios:
   interactive volume rendering capability can complement custom
   data-processing tools.
 2. A standalone viewer application for quickly inspecting several
-  common 3D image formats.
+  common 3D image formats based on TIFF.
 
 ### Prerequisites
 
 Volspy is developed primarily on Linux with Python 2.7 but also tested
 on Mac OSX. It has several requirements:
 
-- [Vispy](http://vispy.org) visualization library to access OpenGL
-  GPUs.  A recent development version is needed, including
-  high-precision texture format features merged into the
-  [vispy/master](https://github.com/vispy/vispy) branch on 2015-01-30.
+- [Vispy](http://vispy.org) visualization library to access OpenGL GPUs.  A compatible development version is needed, such as [karlcz/vispy](https://github.com/karlcz/vispy) which is a clean branch of the upstream [vispy/vispy](https://github.com/vispy/vispy) master.
 - [Numpy](http://www.numpy.org) numerical library to process
   N-dimensional data.
-- [Tifffile](http://www.lfd.uci.edu/~gohlke/code/tifffile.py.html) for
-  access to OME-TIFF and LSM microscopy file formats.
-- [NiBabel](http://nipy.org/nibabel) for access to additional
-  neuroimaging file formats such as NifTI.
-
-The file-reading part of Volspy can tolerate a missing Tifffile or
-NiBabel prerequisite if you do not need to read those types of files.
+- [Tifffile](http://www.lfd.uci.edu/~gohlke/code/tifffile.py.html) for access to OME-TIFF and LSM microscopy file formats as well as basic 3D TIFF files containing a stack of 2D pages.
 
 ### Installation
 
@@ -90,13 +81,13 @@ Several environment variables can be set to modify the behavior of the `volspy-v
 
 - `ZYX_SLICE` selects a grid-aligned region of interest to view from the original image grid, e.g. `0:10,100:200,50:800` selects a region of interest where Z<10, 100<=Y<200, and 50<=X<800. (Default slice contains the whole image.)
 - `ZYX_VIEW_GRID` changes the desired rendering grid spacing. Set a preferred ZYX micron spacing, e.g. `0.5,0.5,0.5` which the program will try to approximate using integer bin-averaging of source voxels but it will only reduce grid resolution and never increase it. NOTE: Y and X values should be equal to avoid artifacts with current renderer. (Default grid is 0.25, 0.25, 0.25 micron.)
-- `ZNOISE_PERCENTILE` enables a sensor noise estimation by calculating the Nth percentile value along the Z axis, e.g. `ZNOISE_PERCENTILE_5` estimates a 2D noise image as the 5th percentile value across the Z stack, and subtracts that noise image from every slice in the stack as a pre-filtering step. *WARNING*: use of this feature causes the entire image to be loaded into RAM, causing a significantly higher minimum RAM size for runs with large input images. (Default is no noise estimate.)
+- `ZNOISE_PERCENTILE` enables a sensor noise estimation by calculating the Nth percentile value along the Z axis, e.g. `ZNOISE_PERCENTILE=5` estimates a 2D noise image as the 5th percentile value across the Z stack, and subtracts that noise image from every slice in the stack as a pre-filtering step. *WARNING*: use of this feature causes the entire image to be loaded into RAM, causing a significantly higher minimum RAM size for runs with large input images. (Default is no noise estimate.)
   - `ZNOISE_ZERO_LEVEL` controls a lower value clamp for the pre-filtered data when percentile filtering is enabled. (Default is `0`.)
 
-The `ZYX_SLICE`, `ZYX_VIEW_GRID`, and `MAX_3D_TEXTURE_WIDTH` parameters have different but inter-related effects on the scope of the volumetric visualization.
+The `ZYX_SLICE` and `ZYX_VIEW_GRID` parameters have different but inter-related effects on the scope of the volumetric visualization.
 
 1. The `ZYX_VIEW_GRID` can control down-sampling of voxels in arbitrary integer ratios, e.g. to set a preferred grid resolution that can differentiate features of a given size without wasting additional storage space on irrelevant small-scale details. This can save overall RAM required to store the processed volume data by reducing the global image size. The down-sampling occurs incrementally as each sub-block is processed by the block-decomposed processing pipeline.
-1. The `ZYX_SLICE` can arbitrarily discard voxels and thus reduce the final volume size, though discarded voxels may be temporarily present in RAM and require additional memory allocation at that time.
+1. The `ZYX_SLICE` can arbitrarily discard voxels and thus reduce the final volume size, though discarded voxels may be temporarily present in RAM and require additional I/O bandwidth.
 
 ## Help and Contact
 
