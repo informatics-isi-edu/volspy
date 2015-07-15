@@ -537,7 +537,7 @@ Resize viewing window using native window-manager controls.
     def on_timer(self, event):
         self.update_view(True)
 
-    def on_draw(self, event, color_mask=(True, True, True, True), pick=None):
+    def on_draw(self, event, color_mask=(True, True, True, True), pick=None, on_pick=None):
         if self.fps_count >= 10:
             t1 = datetime.datetime.now()
             print "%f FPS" % (10.0 / (t1 - self.fps_t0).total_seconds())
@@ -550,7 +550,7 @@ Resize viewing window using native window-manager controls.
         #print 'draw %d' % self.frame
         self.frame += 1
         if self.slice_mode:
-            return self.volume_renderer.draw_slice(self.viewport1, color_mask=color_mask, pick=pick)
+            return self.volume_renderer.draw_slice(self.viewport1, color_mask=color_mask, pick=pick, on_pick=on_pick)
         else:
-            return self.volume_renderer.draw_volume(self.viewport1, color_mask=color_mask, pick=pick)
+            return self.volume_renderer.draw_volume(self.viewport1, color_mask=color_mask, pick=pick, on_pick=on_pick)
 

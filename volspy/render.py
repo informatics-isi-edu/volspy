@@ -521,7 +521,7 @@ class VolumeRenderer (object):
         self.prog_boundary['u_view'] = view
         self.anti_view = anti_view
 
-    def draw_volume(self, viewport, color_mask=(True, True, True, True), pick=None):
+    def draw_volume(self, viewport, color_mask=(True, True, True, True), pick=None, on_pick=None):
         gloo.set_color_mask(True, True, True, True)
 
         with self.fbo_entry:
@@ -564,6 +564,9 @@ class VolumeRenderer (object):
                 pick_out = self.fbo_pick.read()[0,0,:]
                 
             self.set_uniform('u_picked', pick_out / 255.0)
+
+            if on_pick is not None:
+                on_pick(pick_out)
         else:
             pick_out = None
             self.set_uniform('u_picked', (0, 0, 0, 0))
@@ -579,7 +582,7 @@ class VolumeRenderer (object):
 
         return pick_out
 
-    def draw_slice(self, viewport, color_mask=(True, True, True, True), pick=None):
+    def draw_slice(self, viewport, color_mask=(True, True, True, True), pick=None, on_pick=None):
         gloo.set_color_mask(True, True, True, True)
         self.set_uniform('u_picked', (0, 0, 0, 0))
             
