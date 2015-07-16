@@ -8,12 +8,13 @@ import numpy as np
 
 import datetime
 
-from vispy.util.transforms import scale, translate, rotate, perspective, ortho
+from vispy.util.transforms import perspective, ortho
 from vispy import gloo
 from vispy import app
 
-from .data import ImageCropper
-from .render import maxtexsize, VolumeRenderer
+from .data import ImageManager
+from .render import maxtexsize, VolumeRenderer, rotate, translate, scale
+from .util import bin_reduce
 
 
 #gloo.gl.use_gl('pyopengl debug')
@@ -27,10 +28,11 @@ def keydoc(details):
         
 class Canvas(app.Canvas):
 
-    def _reform_image(self, I, meta):
-        return I
+    def _reform_image(self, I, meta, view_reduction):
+        return bin_reduce(I, view_reduction + (1,))
 
     _frag_glsl_dicts = None
+    _pick_glsl_index = None
     _vol_interp = 'linear'
 
     def __init__(self, filename, reset=True):
@@ -39,8 +41,8 @@ class Canvas(app.Canvas):
             keys='interactive'
             )
 
-        self.vol_cropper = ImageCropper(filename, maxtexsize, self._reform_image)
-        nc = self.vol_cropper.pyramid[0].shape[3]
+        self.vol_cropper = ImageManager(filename, self._reform_image)
+        nc = self.vol_cropper.data.shape[3]
         if nc > 4:
             print "%d channel image encountered, switching to single-channel mode" % nc
             self.vol_channels = (0,)
@@ -50,7 +52,6 @@ class Canvas(app.Canvas):
         self.vol_cropper.set_view(channels=self.vol_channels)
         self.vol_texture = self.vol_cropper.get_texture3d()
         self.vol_zoom = 1.0
-        self.origin = [0, 0, 0] # Z, Y, X
 
         W = self.vol_texture.shape[2]
         self.size = W, W
@@ -59,7 +60,7 @@ class Canvas(app.Canvas):
         if self.vol_channels is not None:
             nc = len(self.vol_channels)
         else:
-            nc = self.vol_cropper.pyramid[0].shape[3]
+            nc = self.vol_cropper.data.shape[3]
         self.volume_renderer = VolumeRenderer(
             self.vol_cropper,
             self.vol_texture,
@@ -67,6 +68,7 @@ class Canvas(app.Canvas):
             np.eye(4, dtype=np.float32), # view
             (int(maxtexsize * 4), int(maxtexsize * 4)), # fbo_size
             frag_glsl_dicts=self._frag_glsl_dicts,
+            pick_glsl_index=self._pick_glsl_index,
             vol_interp=self._vol_interp
             )
 
@@ -116,7 +118,6 @@ class Canvas(app.Canvas):
                 (k, self.adjust_rotate) 
                 for k in [ 'Left', 'Right', 'Up', 'Down', '[', ']', '{', '}' ]
                 ]
-            + [ (k, self.adjust_data_position) for k in 'IJK' ]
             )
             
         self.viewport1 = (0, 0) + self.size
@@ -160,7 +161,7 @@ Resize viewing window using native window-manager controls.
         
 
     def reload_data(self):
-        self.vol_cropper.set_view(self.zoom, self.origin, channels=self.vol_channels)
+        self.vol_cropper.set_view(channels=self.vol_channels)
         self.vol_cropper.get_texture3d(self.vol_texture)
         self.update()
 
@@ -173,14 +174,13 @@ Resize viewing window using native window-manager controls.
             self._timer.stop()
             self._timer = None
 
-        self.vol_origin = [ 0, 0, 0 ]
         self.view = None
         self.rotation = np.eye(4, dtype=np.float32)
         self.anti_rotation = np.eye(4, dtype=np.float32)
         self.scale = np.eye(4, dtype=np.float32)
         self.anti_scale = np.eye(4, dtype=np.float32)
 
-        self.gain = 8.0
+        self.gain = 1.0
         self.zoom = 1.0
         self.floorlvl = 0.1
 
@@ -215,7 +215,7 @@ Resize viewing window using native window-manager controls.
 
     def toggle_channel(self, event=None):
         """Cycle through image channels when in single-channel mode."""
-        nc = self.vol_cropper.pyramid[0].shape[3]
+        nc = self.vol_cropper.data.shape[3]
         if self.vol_channels is not None:
             c = self.vol_channels[0]
             self.vol_channels = ((c+1)%nc,)
@@ -285,24 +285,6 @@ Resize viewing window using native window-manager controls.
         self.update()
         print 'gain set to %.2f' % self.gain
 
-    @keydoc({
-            'I': "Advance ('I') or retreat ('i') zoomed viewing center along data X axis.",
-            'J': "Advance ('J') or retreat ('j') zoomed viewing center along data Y axis.",
-            'K': "Advance ('K') or retreat ('k') zoomed viewing center along data Z axis."
-            })
-    def adjust_data_position(self, event):
-        """Adjust center of viewing region when zoomed in on data larger than 3D texture size."""
-
-        axis = dict(K=0, J=1, I=2)[event.key]
-
-        if 'Shift' in event.modifiers:
-            self.origin[axis] += 10
-        else:
-            self.origin[axis] -= 10
-
-        print 'origin offset', tuple(self.origin)
-        self.reload_data()
-
     def adjust_floor_level(self, event):
         """Increase ('F') or decrease ('f') floor-level used in alpha-transfer function."""
         if 'Shift' in event.modifiers:
@@ -331,7 +313,6 @@ Resize viewing window using native window-manager controls.
             return
 
         print "window resize", event.size
-        #self.size = event.size
         self.prev_size = event.size
 
         if float(width) / float(height) > 1.0:
@@ -524,14 +505,11 @@ Resize viewing window using native window-manager controls.
         for angle, axis in zip(angles, axes):
             rotate(*(self.auto_anti_rotation, -angle) + axis)
 
-        X, Y, Z = self.vol_origin
-        s = self.vol_cropper.min_pixel_step_size(zoom=1.0, outtexture=self.vol_texture)
+        s = self.vol_cropper.min_pixel_step_size(outtexture=self.vol_texture)
 
         prev_view = self.view
         view = np.eye(4, dtype=np.float32)
 
-        # allow subclasses to translate data origin
-        translate(view, -X*s, -Y*s, -Z*s)
         view[...] = np.dot(view, self.rotation)
         if self.drag_rotation is not None:
             view[...] = np.dot(view, self.drag_rotation)
@@ -540,18 +518,15 @@ Resize viewing window using native window-manager controls.
         translate(view, 0., 0., -1.97) # matched to 60 degree fov
 
         anti_view = np.eye(4, dtype=np.float32)
-        anti_origin = np.eye(4, dtype=np.float32)
         anti_view[...] = np.dot(anti_view, self.auto_anti_rotation)
         if self.drag_rotation is not None:
             anti_view[...] = np.dot(anti_view, self.drag_anti_rotation)
         anti_view[...] = np.dot(anti_view, self.anti_rotation)
-        translate(anti_origin, X*s, Y*s, Z*s)
-        anti_view[...] = np.dot(anti_view, anti_origin)
 
         self.anti_view = anti_view
         self.volume_renderer.set_vol_view(view, anti_view)
         self.volume_renderer.set_clip_plane([0, 0, 1, max(self.clip_distance, -0.866 / self.zoom)])
-        self.vol_cropper.set_view(self.zoom, self.origin, anti_view, self.vol_channels)
+        self.vol_cropper.set_view(anti_view, self.vol_channels)
 
         if prev_view is None \
                 or (view != prev_view).any():
@@ -562,7 +537,7 @@ Resize viewing window using native window-manager controls.
     def on_timer(self, event):
         self.update_view(True)
 
-    def on_draw(self, event, color_mask=(True, True, True, True)):
+    def on_draw(self, event, color_mask=(True, True, True, True), pick=None, on_pick=None):
         if self.fps_count >= 10:
             t1 = datetime.datetime.now()
             print "%f FPS" % (10.0 / (t1 - self.fps_t0).total_seconds())
@@ -575,7 +550,7 @@ Resize viewing window using native window-manager controls.
         #print 'draw %d' % self.frame
         self.frame += 1
         if self.slice_mode:
-            self.volume_renderer.draw_slice(self.viewport1, color_mask=color_mask)
+            return self.volume_renderer.draw_slice(self.viewport1, color_mask=color_mask, pick=pick, on_pick=on_pick)
         else:
-            self.volume_renderer.draw_volume(self.viewport1, color_mask=color_mask)
+            return self.volume_renderer.draw_volume(self.viewport1, color_mask=color_mask, pick=pick, on_pick=on_pick)
 

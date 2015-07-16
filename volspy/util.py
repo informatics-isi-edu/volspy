@@ -7,6 +7,9 @@
 from collections import namedtuple
 
 import numpy as np
+import tifffile
+from tifffile import lazyattr
+from xml.dom import minidom
 
 ImageMetadata = namedtuple('ImageMetadata', ['x_microns', 'y_microns', 'z_microns', 'axes'])
 
@@ -37,12 +40,11 @@ def bin_reduce(data, axes_s):
 
     """
     d1 = data
-
+        
     # sort axes by stride distance to optimize for locality
     # doesn't seem to make much difference on modern systems...
     axes = [ (axis, d1.strides[axis]) for axis in range(d1.ndim) ]
     axes.sort(key=lambda p: p[1])
-
     assert len(axes_s) == data.ndim
 
     # reduce one axis at a time to shrink work for subsequent axes
@@ -60,8 +62,8 @@ def bin_reduce(data, axes_s):
                 + [ slice(0, 1-s, s) ]
                 + [ slice(None) for i in range(d1.ndim - axis - 1) ]
             )
-        ].astype(np.float32, copy=False)
-                
+        ].astype(np.float32, copy=True)
+        
         for step in range(1, s):
             a += d1[ 
                 tuple(
@@ -76,186 +78,348 @@ def bin_reduce(data, axes_s):
 
     return d1
 
+class TiffLazyNDArray (object):
+    """Lazy wrapper for large TIFF image stacks.
+
+       Supports some basic ND-array compatibility for data access,
+       with an intended use case of sub-block decomposition of large
+       TIFF stacks, where it is not desirable to hold the entire image
+       array in RAM at one time.
+
+       Slicing via the usual __getitem__ interface will perform
+       memmapped file I/O to build and return an actual numpy
+       ND-array.
+
+       Basic min/max methods will stream through the whole image file
+       while only buffering one page of image data at a time.
+
+    """
+
+    def __init__(self, src, _output_plan=None):
+        """Wrap an image source given by filename or an existing tifffile.TiffFile instance."""
+        if type(src) in [str, unicode]:
+            self.tf = tifffile.TiffFile(src)
+        elif isinstance(src, tifffile.TiffFile):
+            self.tf = src
+        elif isinstance(src, TiffLazyNDArray):
+            self.tf = src.tf
+
+        tfimg = self.tf.series[0]
+        page0 = tfimg.pages[0]
+
+        self.dtype = tfimg.dtype
+        self.tf_shape = tfimg.shape
+        self.tf_axes = tfimg.axes
+        
+        self.stack_ndim = len(tfimg.shape) - len(page0.shape)
+        self.stack_shape = tfimg.shape[0:self.stack_ndim]
+        assert reduce(lambda a,b: a*b, self.stack_shape, 1) == len(tfimg.pages), "TIFF page count mismatch to stack shape"
+        assert tfimg.shape[self.stack_ndim:] == page0.shape, "TIFF page packing structure not understood"
+
+        if _output_plan:
+            self.output_plan = _output_plan
+        else:
+            self.output_plan = [
+                (a, slice(0, self.tf_shape[a], 1), slice(0, self.tf_shape[a], 1))
+                for a in range(len(tfimg.shape))
+            ]
+
+        if self.tf.is_ome:
+            # get OME-TIFF XML metadata
+            p = list(self.tf)[0]
+            d = minidom.parseString(p.tags['image_description'].value)
+            a = dict(d.getElementsByTagName('Pixels')[0].attributes.items())
+            p = None
+            d = None
+            assert len(self.tf.series) == 1
+
+            self.micron_spacing = (
+                float(a['PhysicalSizeZ']),
+                float(a['PhysicalSizeY']),
+                float(a['PhysicalSizeX'])
+            )
+
+        elif self.tf.is_lsm:
+            # get LSM metadata
+            lsmi = None
+            for page in self.tf:
+                if page.is_lsm:
+                    lsmi = page.cz_lsm_info
+
+            assert lsmi is not None
+
+            self.micron_spacing = (
+                lsmi.voxel_size_z * 10**6,
+                lsmi.voxel_size_y * 10**6,
+                lsmi.voxel_size_x * 10**6
+            )
+
+    def _plan_slicing(self, key):
+        assert isinstance(key, tuple)
+        tfimg = self.tf.series[0]
+        output_plan = [
+            (tf_axis, in_slice, out_slice)
+            for tf_axis, in_slice, out_slice in self.output_plan
+            if out_slice is None and in_slice is not None
+        ]
+
+        current_plan = [ # FIFO of dimensions projected by key
+            (tf_axis, in_slice, out_slice)
+            for tf_axis, in_slice, out_slice in self.output_plan
+            if out_slice is not None
+        ]
+        
+        for elem in key:
+            if elem is None:
+                # inject fake output dimension
+                tf_axis = None
+                out_slice = slice(0,1,1)
+                in_slice = None
+            else:
+                tf_axis, in_slice, out_slice = current_plan.pop(0)
+                if isinstance(elem, int):
+                    # collapse projected dimension
+                    if elem < 0:
+                        elem += out_slice.stop
+                    if elem >= out_slice.stop or elem < 0:
+                        raise IndexError('index %d out of range [0,%d)' % (elem, out_slice.stop))
+                    if isinstance(in_slice, slice):
+                        in_slice = elem + in_slice.start
+                    else:
+                        continue
+                    out_slice = None
+                elif isinstance(elem, slice):
+                    # modify sliced dimension
+                    if elem.step is None:
+                        step = 1
+                    else:
+                        step = elem.step
+                    assert step > 0, "only positive stepping is supported"
+                    if elem.start is None:
+                        start = 0
+                    elif elem.start < 0:
+                        start = elem.start + out_slice.stop
+                    else:
+                        start = elem.start
+                    if elem.stop is None:
+                        stop = out_slice.stop
+                    elif elem.stop < 0:
+                        stop = elem.stop + out_slice.stop
+                    else:
+                        stop = elem.stop
+                    start = max(min(start, out_slice.stop), 0)
+                    stop = max(min(stop, out_slice.stop), 0)
+                    assert start < stop, "empty slicing not supported"
+                    if isinstance(in_slice, slice):
+                        in_slice = slice(in_slice.start + start, in_slice.start + stop, in_slice.step * step)
+                        w = in_slice.stop - in_slice.start
+                        w = w/in_slice.step + (w%in_slice.step and 1 or 0)
+                        out_slice = slice(0,w,1)
+                    else:
+                        in_slice = None
+                        out_slice = slice(0,1,1)
+            output_plan.append((tf_axis, in_slice, out_slice))
+
+        assert not current_plan, "slicing key must project all image dimensions"
+            
+        return output_plan
+            
+    def __getitem__(self, key):
+        tfimg = self.tf.series[0]
+        output_plan = self._plan_slicing(key)
+        
+        # skip fake dimensions for intermediate buffer
+        buffer_plan = [
+            (tf_axis, in_slice, out_slice)
+            for tf_axis, in_slice, out_slice in output_plan
+            if in_slice is not None
+        ]
+
+        # input will be untransposed with dimension in TIFF order
+        input_plan = list(buffer_plan)
+        input_plan.sort(key=lambda p: p[0])
+        assert len(input_plan) == len(tfimg.shape)
+        
+        # buffer may have fewer dimensions than input slicing due to integer keys
+        buffer_shape = tuple([
+            out_slice.stop
+            for tf_axis, in_slice, out_slice in input_plan
+            if isinstance(in_slice, slice)
+        ])
+        buffer_axes = [
+            tf_axis
+            for tf_axis, in_slice, out_slice in input_plan
+            if isinstance(in_slice, slice)
+        ]        
+        buffer = np.empty(buffer_shape, self.dtype)
+
+        # generate page-by-page slicing
+        stack_plan = input_plan[0:self.stack_ndim]
+        page_plan = input_plan[self.stack_ndim:]
+        
+        def generate_io_slices(stack_plan, page_plan):
+            if stack_plan:
+                tf_axis, in_slice, out_slice = stack_plan[0]
+                if isinstance(in_slice, slice):
+                    for x in range(in_slice.start, in_slice.stop):
+                        for outslc, inslc in generate_io_slices(stack_plan[1:], page_plan):
+                            yield ((x - in_slice.start,) + outslc, (x,) + inslc)
+                elif isinstance(in_slice, int):
+                    for outslc, inslc in generate_io_slices(stack_plan[1:], page_plan):
+                        yield (outslc, (in_slice,) + inslc)
+                else:
+                    assert False
+            else:
+                yield tuple(p[2] for p in page_plan if p[2] is not None), tuple(p[1] for p in page_plan)
+                
+        stack_spans = [
+            reduce(lambda a,b: a*b, self.stack_shape[i+1:], 1)
+            for i in range(self.stack_ndim)
+        ]
+
+        # perform actual pixel I/O
+        for out_slicing, in_slicing in generate_io_slices(stack_plan, page_plan):
+            page = sum(map(lambda c, s: c*s, in_slicing[0:self.stack_ndim], stack_spans))
+            page_slice = in_slicing[self.stack_ndim:]
+            buffer[out_slicing] = tfimg.pages[page].asarray(memmap=True)[page_slice]
+            
+        # apply current transposition to buffered dimensions
+        buffer_axis = dict([(buffer_axes[d], d) for d in range(len(buffer_axes))])
+        transposition = [
+            buffer_axis[tf_axis]
+            for tf_axis, in_slice, out_slice in output_plan
+            if isinstance(in_slice, slice)
+        ]
+        buffer = buffer.transpose(tuple(transposition))
+        
+        out_slicing = [
+            in_slice is not None and out_slice or in_slice
+            for tf_axis, in_slice, out_slice in output_plan
+            if isinstance(in_slice, slice) or in_slice is None
+        ]
+        return buffer[tuple(out_slicing)]
+        
+    def transpose(self, *transposition):
+        output_plan = [
+            (tf_axis, in_slice, out_slice)
+            for tf_axis, in_slice, out_slice in self.output_plan
+            if out_slice is None
+        ]
+        current_plan = [ # FIFO of dimensions projected by key
+            (tf_axis, in_slice, out_slice)
+            for tf_axis, in_slice, out_slice in self.output_plan
+            if out_slice is not None
+        ]
+
+        for d in transposition:
+            assert current_plan[d] is not None, "transpose cannot repeat same dimension"
+            p = current_plan[d]
+            current_plan[d] = None
+            output_plan.append(p)
+
+        assert len([p for p in current_plan if p is not None]) == 0, "transpose must include dimensions"
+        return TiffLazyNDArray(self, output_plan)
+
+    def lazyget(self, key):
+        output_plan = self._plan_slicing(key)
+        return TiffLazyNDArray(self, output_plan)
+
+    def force(self):
+        return self[tuple(slice(None) for d in self.shape)]
+    
+    @property
+    def ndim(self):
+        return len([p for p in self.output_plan if p[2] is not None])
+    
+    @property
+    def shape(self):
+        return tuple(p[2].stop for p in self.output_plan if p[2] is not None)
+
+    @property
+    def axes(self):
+        return ''.join(p[0] is not None and self.tf_axes[p[0]] or 'Q' for p in self.output_plan if p[2] is not None)
+
+    @property
+    def strides(self):
+        plan = [(p[0], p[2].stop) for p in self.output_plan if p[2] is not None]
+        plan = [(i,) + plan[i] for i in range(len(plan))]
+        plan.sort(key=lambda p: p[1])
+        strides = []
+        for i in range(len(plan)):
+            strides.append((plan[i][0], reduce(lambda a, b: a*b, [p[2] for p in plan[i+1:]], 1)))
+        strides.sort(key=lambda p: p[0])
+        strides = [p[1] for p in strides]
+        return strides
+        
+    @lazyattr
+    def min_max(self):
+        amin = None
+        amax = None
+        tfimg = self.tf.series[0]
+        for tfpage in tfimg.pages:
+            p = tfpage.asarray(memmap=True)
+            pmin = float(p.min())
+            pmax = float(p.max())
+            if amin is not None:
+                amin = min(amin, pmin)
+            else:
+                amin = pmin
+            if amax is not None:
+                amax = max(amax, pmax)
+            else:
+                amax = pmax
+        return (amin, amax)
+                
+    def max(self):
+        return self.min_max[1]
+            
+    def min(self):
+        return self.min_max[0]
+
+def canonicalize(data):
+    """Restructure to preferred TCZYX or CZYX form..."""
+    data = data.transpose(*[d for d in map(data.axes.find, 'TCZYX') if d >= 0])
+    projection = []
+
+    if 'T' in data.axes and data.shape[0] == 1:
+        projection.append(0) # remove trivial T dimension
+
+    if 'C' not in data.axes:
+        projection.append(None) # add trivial C dimension
+    elif projection:
+        projection.append(slice(None))
+
+    if projection:
+        projection += [slice(None) for d in 'ZYX']
+        data = data.lazyget(tuple(projection))
+        
+    return data
 
 def load_tiff(fname):
     """Load named file using TIFF reader, returning (data, metadata).
 
-       Data is an ND-array.  Metadata is an ImageMetadata named tuple.
-
-       Raises NotImplementedError if TIFF reader is not available.
-       Raises ValueError if file cannot be loaded by TIFF reader.
+       Keep temporarily for backward-compatibility...
     """
+    data = TiffLazyNDArray(fname)
     try:
-        import tifffile
-        from xml.dom import minidom
-    except Exception, te:
-        raise NotImplementedError(str(te))
-
-    tf = tifffile.TiffFile(fname, multifile=False)
-    data = None
-    md = None
-
-    def canonicalize(data, axes, flipY=True):
-        """Restructure to our preferred CZYX format."""
-        print data.shape, axes, data.dtype, data.strides, data.nbytes
-
-        pos = axes.find('T')
-        if pos >= 0:
-            # remove useless time axis
-            if data.shape[pos] == 1:
-                data = data[
-                    tuple(
-                        [ slice(None) for i in range(pos) ]
-                        + [ 0 ]
-                        + [ slice(None) for i in range(pos+1, data.ndim) ]
-                    )
-                ]
-                axes = axes[0:pos] + axes[pos+1:]
-            else:
-                raise NotImplementedError('Unexpected TIFF with T axis length %d' % data.shape[pos])
-
-        pos = axes.find('C')
-        if pos >= 1:
-            # move color axis to first position
-            data = data.transpose(
-                *tuple(
-                    [ pos ]
-                    + [ i for i in range(data.ndim) if i != pos ]
-                )
-            )
-            axes = axes[pos] + ''.join([
-                axes[i] for i in range(data.ndim) if i != pos
-            ])
-        elif pos == 0:
-            pass
-        elif data.ndim == 3:
-            data = data[None,...]
-            axes = 'C' + axes
-        else:
-            raise NotImplementedError('Unexpected %d-dimension TIFF without C axis.' % data.ndim)
-
-        # flip Y axis to match Fiji user expectation
-        pos = axes.find('Y')
-        if pos >= 0:
-            if flipY:
-                data = data[
-                    tuple(
-                        [ slice(None) for i in range(pos) ]
-                        + [ slice(None, None, -1) ]
-                        + [ slice(None) for i in range(pos+1, data.ndim) ]
-                    )
-                ]
-        else:
-            raise NotImplementedError('Unexpected TIFF without Y axis.')
-
-        print data.shape, axes, data.dtype, data.strides, data.nbytes
-        return data, axes
-
-    if tf.is_ome:
-        # get OME-TIFF XML metadata
-        p = list(tf)[0]
-        d = minidom.parseString(p.tags['image_description'].value)
-        a = dict(d.getElementsByTagName('Pixels')[0].attributes.items())
-        p = None
-        d = None
-
-        assert len(tf.series) == 1
-        data = tf.asarray()
-        axes = tf.series[0]['axes']
-        tf.close()
-        tf = None
-
-        data, axes = canonicalize(data, axes)
-
-        md = ImageMetadata(
-            float(a['PhysicalSizeX']),
-            float(a['PhysicalSizeY']),
-            float(a['PhysicalSizeZ']),
-            axes
-        )
-
-    elif tf.is_lsm:
-        # get LSM metadata
-        lsmi = None
-        for page in tf:
-            if page.is_lsm:
-                lsmi = page.cz_lsm_info
-
-        assert lsmi is not None
-
-        data = tf.asarray()
-        axes = tf.series[0]['axes']
-
-        data, axes = canonicalize(data, axes)
-
-        md = ImageMetadata(
-            lsmi.voxel_size_x * 10**6,
-            lsmi.voxel_size_y * 10**6,
-            lsmi.voxel_size_z * 10**6,
-            axes
-            )
-
-    else:
-        # plain old tiff?
-        data = tf.asarray()
-        axes = tf.series[0]['axes']
-        md = None
-        print axes, data.shape
-        if data.ndim == 4 and data.shape[3] in range(1, 5):
-            data = data.transpose(3,0,1,2)
-        elif data.ndim == 3:
-            data = data[None,:,:,:]
-
-    assert data is not None
-    return data, md
-
-def load_nii(fname):
-    """Load named file using NiFTi reader, returning (data, metadata).
-
-       Data is an ND-array.  Metadata is an ImageMetadata named tuple.
-
-       Raises NotImplementedError if NiFTi reader is not available.
-       Raises ValueError if file cannot be loaded by NiFTi reader.
-    """
-    
-    try:
-        import nibabel
+        data = canonicalize(data)
     except:
-        raise te
+        # special case for raw TIFF (not LSM, not OME)
+        if data.ndim == 3:
+            data = data[(None,slice(None),slice(None),slice(None))] # add fake color dimension
+        elif data.ndim == 4 and data.shape[3] < 4:
+            data = data.transpose(3,0,1,2) # transpose color
 
-    img = nibabel.load(fname)
-    data = img.get_data()
-    grid_spacing_mm = img.header.get_zooms()
-            
-    assert data.ndim == 3
-    data = data[None,...] # add single-channel axis
-    assert len(grid_spacing_mm) == 3
-
-    md = ImageMetadata(
-        grid_spacing_mm[0] * 1000,
-        grid_spacing_mm[1] * 1000,
-        grid_spacing_mm[2] * 1000,
-        None
-    )
-
-    print "Loaded %s %s" % (data.shape, data.dtype)
+    try:
+        z_microns, y_microns, x_microns = data.micron_spacing
+        md = ImageMetadata(x_microns, y_microns, z_microns, data.axes)
+    except AttributeError:
+        md = None
     return data, md
 
 def load_image(fname):
     """Load named file, returning (data, metadata).
 
-       Data is an ND-array.  Metadata is an ImageMetadata named tuple.
-
-       Raises ValueError if file cannot be loaded by any available reader.
+       Keep temporarily for backward-compatibility...
     """
-    for f in load_tiff, load_nii:
-        try:
-            return f(fname)
-        except ValueError, te:
-            continue
-        except NotImplementedError, te:
-            print "Notice: %s" % te
-            continue
-
-    raise ValueError('No data loader worked for %s' % fname)
-
+    return load_tiff(fname)

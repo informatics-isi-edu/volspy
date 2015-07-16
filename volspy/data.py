@@ -13,24 +13,9 @@ The ImageCropper class encapsulates the state necessary to:
 
   1. load a volume image file
 
-  2. produce a reduced-resolution pyramid in case the image is too
-     large for the volume rendering environment (whether due to
-     hardware, software, or user preference)
+  2. prepare 3D texture data of an appropriate texture storage format
 
-  3. prepare 3D texture data
-
-     a. of an appropriate texture storage format
-
-     b. at an appropriate resolution in the hierarchy
-
-     c. potentially cropped
-
-  4. prepare 3D bounding box geometry
-
-To perform its functions, the ImageCropper requires some information
-about the viewing conditions, such as zoom-level and optional data
-origin offset to allow panning within a zoomed and cropped
-high-resolution volume.
+  3. prepare 3D bounding box geometry
 
 The ImageCropper also understands image file metadata returned by the
 image reader to configure voxel aspect ratio for a spatial
@@ -38,6 +23,7 @@ interpretation of the volume data.
 
 """
 
+import os
 import numpy as np
 import math
 
@@ -46,82 +32,96 @@ from vispy import gloo
 from .util import load_image, bin_reduce
 from .geometry import make_cube_clipped
 
-class ImageCropper (object):
+class wrapper (np.ndarray):
+    """Subtype to allow extra attributes"""
+    pass
 
-    def __init__(self, filename, maxdim=None, reform_data=None):
-        if reform_data is None:
-            reform_data = lambda x, meta: x
+class ImageManager (object):
 
+    def __init__(self, filename, reform_data=None):
         I, self.meta = load_image(filename)
 
-        self.maxdim = maxdim
+        try:
+            voxel_size = I.micron_spacing
+        except AttributeError:
+            voxel_size = (1., 1., 1.)
 
-        # interleave channels
+        try:
+            view_grid_microns = tuple(map(float, os.getenv('ZYX_VIEW_GRID').split(",")))
+            assert len(view_grid_microns) == 3
+        except:
+            view_grid_microns = (0.25, 0.25, 0.25)
+        print "Using %s micron view grid. Override with ZYX_VIEW_GRID='float,float,float'" % (view_grid_microns,)
+
+        view_reduction = tuple(map(lambda vs, ps: max(int(ps/vs), 1), voxel_size, view_grid_microns))
+            
+        # temporary pre-processing hacks to investigate XY-correlated sensor artifacts...
+        try:
+            ntile = int(os.getenv('ZNOISE_PERCENTILE'))
+            I = I.force()
+            zerofield = np.percentile(I, ntile, axis=1)
+            print 'Image %d percentile value over Z-axis ranges [%f,%f]' % (ntile, zerofield.min(), zerofield.max())
+            I -= zerofield
+            print 'Image offset by %d percentile XY value to new range [%f,%f]' % (ntile, I.min(), I.max())
+            zero = float(os.getenv('ZNOISE_ZERO_LEVEL'), 0)
+            I = I * (I >= 0.)
+            print 'Image clamped to range [%f,%f]' % (I.min(), I.max())
+        except:
+            pass
+            
         I = I.transpose(1,2,3,0)
+        if isinstance(I, np.ndarray):
+            # temporarily maintain micron_spacing after percentile hack above...
+            I2 = wrapper(shape=I.shape, dtype=I.dtype)
+            I2[:,:,:,:] = I[:,:,:,:]
+            I = I2
+            setattr(I, 'micron_spacing', voxel_size)
+            
+        if reform_data is not None:
+            I = reform_data(I, self.meta, view_reduction)
+            
+        voxel_size = map(lambda a, b: a*b, voxel_size, view_reduction)
+        self.Zaspect = voxel_size[0] / voxel_size[2]
 
-        # correct aspect ratio if available
-        if self.meta is not None:
-            self.Zaspect = self.meta.z_microns / self.meta.x_microns
-        else: 
-            self.Zaspect = 1.0
+        # allow user to select a bounding box region of interest
+        bbox = os.getenv('ZYX_SLICE')
+        if bbox:
+            bbox = bbox.split(",")
+            assert len(bbox) == 3, "ZYX_SLICE must have comma-separated slices for 3 axes Z,Y,X"
+            bbox = [s.split(":") for s in bbox]
+            for p in bbox:
+                assert len(p) == 2, "ZYX_SLICE must have START:STOP pair for each axial slice"
+            for start, stop in bbox:
+                assert int(start) >= 0, "ZYX_SLICE START must be 0 or greater"
+                assert int(stop) >= 1, "ZYX_SLICE STOP must be 1 or greater"
+            bbox = tuple(map(
+                lambda slc, vr: slice(int(slc[0])/vr, int(slc[1])/vr),
+                bbox,
+                view_reduction
+            )) + (slice(None),)
+            datamin = I.min()
+            datamax = I.max()
+            I = I[bbox]
+            I[0,0,0,0] = datamin
+            I[-1,-1,-1,0] = datamax
+            
+        self.data = I
 
-        I = reform_data(I, self.meta)
-        
-        # store as base of pyramid
-        self.pyramid = [ I ]
-        self._extend_pyramid()
-        for img in self.pyramid:
-            print img.shape, img.dtype
-
-        self.last_zoom = None
-        self.last_origin = None
         self.last_channels = None
-        self.origin = None
         self.channels = None
         self.set_view()
-        self.last_level = None
 
-    def min_pixel_step_size(self, zoom=1.0, outtexture=None):
-        zoom_power = max(0, int(math.floor( math.log(zoom, 2.0) )))
-        level = max(-1 - zoom_power, - len(self.pyramid))
-        
+    def min_pixel_step_size(self, outtexture=None):
         if outtexture is not None:
             D, H, W, C = outtexture.shape
         else:
-            D, H, W, C = self.pyramid[level].shape
+            D, H, W, C = self.data.shape
 
         span = max(W, H, D*self.Zaspect)
 
         return 1./span
 
-    def downsample_power(self, x):
-        if self.maxdim:
-            return math.ceil( math.log(x/self.maxdim, 2.0) )
-        else:
-            return 0
-
-    def next_pow2(self, x):
-        return int(2**( math.ceil( math.log(x, 2.0) ) ))
-
-    def _extend_pyramid(self):
-        p = max([ 0 ] + map(self.downsample_power, self.pyramid[0].shape[0:3]))
-        while p > 0:
-            # reduce by half
-            self.pyramid.append(
-                bin_reduce(
-                    self.pyramid[-1], 
-                    [2, 2, 2, 1]
-                ).astype(
-                    self.pyramid[-1].dtype, 
-                    copy=False
-                )
-            )
-            p -= 1
-        print 'pyramid %d levels deep' % len(self.pyramid)
-
-    def set_view(self, zoom=1.0, origin=[0,0,0], anti_view=None, channels=None):
-        self.zoom = zoom
-        self.origin = tuple(origin)
+    def set_view(self, anti_view=None, channels=None):
         if anti_view is not None:
             self.anti_view = anti_view
         if channels is not None:
@@ -131,18 +131,13 @@ class ImageCropper (object):
             self.channels = channels
         else:
             # default to first N channels u to 4 for RGBA direct mapping
-            self.channels = tuple(range(0, min(self.pyramid[0].shape[3], 4)))
+            self.channels = tuple(range(0, min(self.data.shape[3], 4)))
         for c in self.channels:
             assert c >= 0
-            assert c < self.pyramid[0].shape[3]
-
-    def _get_texture3d_shape3(self, level=None):
-        if level is None:
-            level = self.last_level
-        return map(lambda x: min(int(x), int(self.maxdim)), self.pyramid[level].shape[0:3])
+            assert c < self.data.shape[3]
 
     def _get_texture3d_format(self):
-        I0 = self.pyramid[0]
+        I0 = self.data
         nc = len(self.channels)
 
         if I0.dtype == np.uint8:
@@ -151,8 +146,8 @@ class ImageCropper (object):
             bps = 2
         else:
             assert I0.dtype == np.float16 or I0.dtype == np.float32
-            #bps = 2
-            bps = 4
+            bps = 2
+            #bps = 4
 
         print (nc, bps)
         return {
@@ -179,84 +174,40 @@ class ImageCropper (object):
 
            sets data in outtexture and returns the texture.
         """
-
-        zoom_power = max(0, int(math.floor( math.log(self.zoom, 2.0) )))
-        level = max(-1 - zoom_power, - len(self.pyramid))
-        I0 = self.pyramid[level]
-        D0, H0, W0, C0 = I0.shape
+        I0 = self.data
 
         # choose size for texture data
-        D, H, W = self._get_texture3d_shape3(level)
+        D, H, W = self.data.shape[0:3]
         C = len(self.channels)
 
         if outtexture is None:
-            print 'allocating texture3D'
             format, internalformat = self._get_texture3d_format()
-            print format, internalformat
+            print 'allocating texture3D', (D, H, W, C), internalformat
             outtexture = gloo.Texture3D(shape=(D, H, W, C), format=format, internalformat=internalformat)
-        elif self.last_level == level \
-             and self.last_origin == self.origin \
-             and self.last_channels == self.channels:
-            # don't need to reload texture data
-            print 'reusing texture', self.last_level, level, self.last_origin, self.origin
+        elif self.last_channels == self.channels:
+            print 'reusing texture'
             return outtexture
         else:
-            print 'regenerating texture', self.last_level, level, self.last_origin, self.origin
+            print 'regenerating texture'
 
-        print 'using level', len(self.pyramid) + level
         print (D, H, W, C), '<-', I0.shape, list(self.channels), I0.dtype
 
-        # offsets to center data in texture + border pad
-
-        # requested origin position... only matters if src larger than dst per axis
-        z, y, x = self.origin or (0, 0, 0)
-
-        posfactor = 2**abs(2+level)  # level ranges -1 ... -N
-
-        z *= posfactor
-        y *= posfactor
-        x *= posfactor
-
-        def calculate_slices(L, L0, origin, axisname, pad=0):
-            """Return out_slice, in_slice"""
-            if (L-pad) >= L0:
-                assert (L-pad) == L0
-                out_base, in_base, offset = pad, 0, 0
-            else:
-                out_base = pad
-                in_base = (L0 - L + pad)/2
-                offset = ( ((origin < 0) and -1 or 1) # sign
-                           * min(abs(origin), in_base) # clamp offset to available padding
-                           )
-            slices = slice(out_base, out_base+L-1), slice(in_base+offset, in_base+L-1+offset)
-            print 'axis %s:' % axisname, 'origin %d (requested) %d (final)' % (origin, offset), slices[0], '<-', slices[1]
-            return slices
-
-        # find subtexture indices and input origin
-        oKK, iKK = calculate_slices(D, D0, z, 'Z', pad=1)
-        oJJ, iJJ = calculate_slices(H, H0, y, 'Y', pad=1)
-        oII, iII = calculate_slices(W, W0, x, 'X', pad=1)
-
-        # subset to load into texture
         # normalize for OpenGL [0,1.0] or [0,2**N-1] and zero black-level
         maxval = I0.max()
         minval = I0.min()
         scale = 1.0/(float(maxval) - float(minval))
         if I0.dtype == np.uint8 or I0.dtype == np.int8:
-            tmpout = np.zeros((D+1, H+1, W+1, C), dtype=np.uint8)
+            tmpout = np.zeros((D, H, W, C), dtype=np.uint8)
             scale *= float(2**8-1)
         else:
             assert I0.dtype == np.float16 or I0.dtype == np.float32 or I0.dtype == np.uint16 or I0.dtype == np.int16
-            tmpout = np.zeros((D+1, H+1, W+1, C), dtype=np.uint16 )
+            tmpout = np.zeros((D, H, W, C), dtype=np.uint16 )
             scale *= (2.0**16-1)
 
         # pack selected channels into texture
         for i in range(C):
-            tmpout[oKK,oJJ,oII,i] = (I0[iKK,iJJ,iII,self.channels[i]].astype(np.float32) - minval) * scale
+            tmpout[:,:,:,i] = (I0[:,:,:,self.channels[i]].astype(np.float32) - minval) * scale
 
-        self.last_level = level
-        self.last_zoom = self.zoom
-        self.last_origin = self.origin
         self.last_channels = self.channels
         outtexture.set_data(tmpout)
         return outtexture
@@ -267,8 +218,7 @@ class ImageCropper (object):
             Excludes semi-space beneath plane, i.e. with negative plane
             distance.  Omitting plane produces regular unclipped cube.
         """
-        shape = self._get_texture3d_shape3()
-            
-        return make_cube_clipped(shape, self.Zaspect, 2**(1+self.last_level), dataplane)
+        shape = self.data.shape[0:3]
+        return make_cube_clipped(shape, self.Zaspect, 2, dataplane)
         
 
