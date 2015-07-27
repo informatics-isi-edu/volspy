@@ -70,18 +70,6 @@ class ImageManager (object):
             pass
             
         I = I.transpose(1,2,3,0)
-        if isinstance(I, np.ndarray):
-            # temporarily maintain micron_spacing after percentile hack above...
-            I2 = wrapper(shape=I.shape, dtype=I.dtype)
-            I2[:,:,:,:] = I[:,:,:,:]
-            I = I2
-            setattr(I, 'micron_spacing', voxel_size)
-            
-        if reform_data is not None:
-            I = reform_data(I, self.meta, view_reduction)
-            
-        voxel_size = map(lambda a, b: a*b, voxel_size, view_reduction)
-        self.Zaspect = voxel_size[0] / voxel_size[2]
 
         # allow user to select a bounding box region of interest
         bbox = os.getenv('ZYX_SLICE')
@@ -118,6 +106,19 @@ class ImageManager (object):
             else:
                 I = I[slc]
             
+        if isinstance(I, np.ndarray):
+            # temporarily maintain micron_spacing after munging above...
+            I2 = wrapper(shape=I.shape, dtype=I.dtype)
+            I2[:,:,:,:] = I[:,:,:,:]
+            I = I2
+            setattr(I, 'micron_spacing', voxel_size)
+            
+        if reform_data is not None:
+            I = reform_data(I, self.meta, view_reduction)
+            
+        voxel_size = map(lambda a, b: a*b, voxel_size, view_reduction)
+        self.Zaspect = voxel_size[0] / voxel_size[2]
+
         self.data = I
 
         self.last_channels = None
