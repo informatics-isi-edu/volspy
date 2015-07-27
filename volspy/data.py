@@ -104,6 +104,19 @@ class ImageManager (object):
             I = I[bbox]
             I[0,0,0,0] = datamin
             I[-1,-1,-1,0] = datamax
+
+        if I.shape[2] % 16:
+            # trim for 16-pixel row alignment
+            slc = tuple([
+                slice(None),
+                slice(None),
+                slice(0,I.shape[2]/16*16),
+                slice(None)
+            ])
+            if hasattr(I, 'lazyget'):
+                I = I.lazyget(slc)
+            else:
+                I = I[slc]
             
         self.data = I
 
