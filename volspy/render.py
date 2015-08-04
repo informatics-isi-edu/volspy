@@ -518,7 +518,12 @@ class VolumeRenderer (object):
         self.prog_boundary['u_projection'] = projection
 
     def set_uniform(self, name, value):
-        for prog in self.prog_vol_slicers + self.prog_ray_casters:
+        for prog in self.prog_vol_slicers:
+            if name == 'u_gain':
+                prog[name] = value * 4
+            else:
+                prog[name] = value
+        for prog in self.prog_ray_casters:
             prog[name] = value
         
     def set_vol_view(self, view, anti_view):
