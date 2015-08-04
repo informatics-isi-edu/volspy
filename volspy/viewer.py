@@ -14,7 +14,7 @@ from vispy import app
 
 from .data import ImageManager
 from .render import maxtexsize, VolumeRenderer, rotate, translate, scale
-from .util import bin_reduce
+from .util import bin_reduce, clamp
 
 
 #gloo.gl.use_gl('pyopengl debug')
@@ -92,14 +92,10 @@ class Canvas(app.Canvas):
         # to allow over-riding by subclasses
         self.drag_button_handlers = {
             1: lambda distance, delta, pos1, basis: self._mouse_drag_rotation(distance, delta),
-            2: lambda distance, delta, pos1, basis: self._mouse_drag_slicing(pos1, basis),
-            3: lambda distance, delta, pos1, basis: self._mouse_drag_clipping(pos1, basis)
-            }
+        }
 
         self.end_drag_handlers = [
             self._end_drag_rotation,
-            self._end_drag_slicing,
-            self._end_drag_clipping
             ]
 
         self.key_press_handlers = dict(
@@ -111,6 +107,7 @@ class Canvas(app.Canvas):
                 ('Z', self.adjust_zoom),
                 ('R', self.reset_ui),
                 ('F', self.adjust_floor_level),
+                ('Space', self.toggle_slicing),
                 ('?', self.help)
                 ]
             + [ (k, self.adjust_gain) for k in 'G1234567890!@#$%^&*()' ]
@@ -403,19 +400,46 @@ Resize viewing window using native window-manager controls.
             self.update_view()
             self.update()
 
-    def _mouse_drag_clipping(self, pos1, basis):
+    def on_mouse_wheel(self, event):
+        """Adjust clip/slice place distance with vertical scroll wheel.
+
+           The clip range is [-1.96, 1.96] to account for viewing a [-1, 1]
+           normalized cube with its longest diagonal perpindicular to
+           the screen, and being able to clip past the near and far
+           corners.
+
+           Divide the range into basis number of steps, where basis is
+           current window size so higher resolution renders have finer
+           depth precision.
+
+           Invert the sign of the wheel delta since we interpret
+           scrolling "down" as plunging the clip plane deeper into the
+           image.
+
+        """
+        basis = float(min(*self.size))
         prev_clip = self.clip_distance
-        self.clip_distance = 1.8 * (pos1[1] / basis - .5)
-        if prev_clip != self.clip_distance:
+
+        self.clip_distance = clamp(self.clip_distance - event.delta[1]/basis, -1.96, 1.96)
+        
+        if self.clip_distance != prev_clip:
+            print 'scroll %s, clip_distance %s' % (event.delta, self.clip_distance)
             self.update_view()
 
-    def _mouse_drag_slicing(self, pos1, basis):
-        self._mouse_drag_clipping(pos1, basis)
-        prev_slice = self.slice_mode
-        self.slice_mode = True
-        if prev_slice != self.slice_mode:
-            self.update_view()
-
+    def toggle_slicing(self, event):
+        """(Space key) Toggle volume and slicing modes."""
+        if not self.slice_mode:
+            self.slice_mode = True
+            if 'Shift' not in event.modifiers:
+                # set to center for usability?
+                self.clip_distance = 0
+        else:
+            self.slice_mode = False
+            if 'Shift' not in event.modifiers:
+                self.clip_distance = -1.96
+                
+        self.update_view()
+        
     def on_mouse_move(self, event):
         if event.is_dragging:
             pos0 = np.array(event.press_event.pos, dtype=np.float32)
@@ -454,19 +478,6 @@ Resize viewing window using native window-manager controls.
             self.drag_anti_rotation = None
 
             self.update_view()
-
-    def _end_drag_clipping(self):
-        prev_clip = self.clip_distance
-        self.clip_distance = -0.866 / self.zoom
-        if prev_clip != self.clip_distance:
-            self.update_view()
-            self.update()
-
-    def _end_drag_slicing(self):
-        if self.slice_mode:
-            self.slice_mode = False
-            self.update_view()
-            self.update()
 
     def on_mouse_release(self, event):
         if event.is_dragging:

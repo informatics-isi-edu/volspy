@@ -20,6 +20,8 @@ def plane_distance(p, plane):
     A, B, C, D = plane
     return A*x + B*y + C*z + D
 
+def clamp(x, x_min, x_max):
+    return max(x_min, min(x, x_max))
 
 def bin_reduce(data, axes_s):
     """Reduce ndarray data via bin-averaging for specified per-axis bin sizes.
