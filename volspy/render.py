@@ -177,6 +177,7 @@ class VolumeSliceProgram (VolumeProgram):
         uniforms=None,
         colorunpack=None,
         colorxfer=None,
+        alphastmt=None,
         **kwargs
         ):
         """Return GLSL fragment shader for volume slicer.
@@ -209,6 +210,8 @@ class VolumeSliceProgram (VolumeProgram):
             colorunpack = _color_repacker
         if colorxfer is None:
             colorxfer = _color_gain
+        if alphastmt is None:
+            alphastmt = _linear_alpha
         return """
 uniform sampler3D u_data_texture;
 uniform sampler2D u_entry_texture;
@@ -227,11 +230,11 @@ void main()
        col_packed_smp = texture3D(u_data_texture, texcoord.xyz / texcoord.w);
        %(repack)s
        %(colorxfer)s
+       %(alpha)s
     }
     else {
        col_smp = vec4(0);
     }
-    col_smp = col_smp * col_smp.a * 4.0;
     col_smp.a = 1.0;
     gl_FragColor = col_smp;
 }
@@ -239,7 +242,8 @@ void main()
 """ % dict(
             uniforms=uniforms,
             repack=colorunpack,
-            colorxfer=colorxfer
+            colorxfer=colorxfer,
+    alpha=alphastmt
             )
 
     def __init__(self, vol_texture, num_channels, entry_texture, gain=1.0, frag_glsl_parts=None):
