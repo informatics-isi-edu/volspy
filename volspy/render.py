@@ -584,7 +584,6 @@ class VolumeRenderer (object):
 
     def draw_slice(self, viewport, color_mask=(True, True, True, True), pick=None, on_pick=None):
         gloo.set_color_mask(True, True, True, True)
-        self.set_uniform('u_picked', (0, 0, 0, 0))
             
         with self.fbo_entry:
             # draw the ray entry map via front-faces
@@ -594,6 +593,35 @@ class VolumeRenderer (object):
             gloo.clear(color=True, depth=False)
             gloo.set_state(blend=False, depth_test=False, cull_face=True)
             self.prog_boundary.draw(self.slice_faces)
+
+        if pick is not None:
+            X, Y, W, H = viewport
+            x, y = pick
+            pickport = X-x, y-H-Y, W, H
+            if self.pick_glsl_index is not None:
+                glsl_index = self.pick_glsl_index
+            else:
+                glsl_index = self.color_mode
+
+            self.set_uniform('u_picked', (0, 0, 0, 0))
+                
+            with self.fbo_pick:
+                gloo.set_color_mask(* color_mask)
+                gloo.set_clear_color('black')
+                gloo.set_viewport(*pickport)
+                gloo.set_cull_face(mode='back')
+                gloo.clear(color=True, depth=False)
+                gloo.set_state(blend=False, depth_test=False, cull_face=True)
+                self.prog_vol_slicers[glsl_index].draw()
+                pick_out = self.fbo_pick.read()[0,0,:]
+                
+            self.set_uniform('u_picked', pick_out / 255.0)
+
+            if on_pick is not None:
+                on_pick(pick_out)
+        else:
+            pick_out = None
+            self.set_uniform('u_picked', (0, 0, 0, 0))
             
         # slice based on entry texture
         gloo.set_color_mask(* color_mask)
@@ -604,3 +632,5 @@ class VolumeRenderer (object):
         gloo.clear(color=True, depth=False)
         self.prog_vol_slicers[self.color_mode].draw()
 
+        return pick_out
+    
