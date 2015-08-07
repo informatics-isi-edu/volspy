@@ -4,6 +4,7 @@
 # Distributed under the (new) BSD License. See LICENSE.txt for more info.
 #
 
+import os
 import numpy as np
 
 import datetime
@@ -33,7 +34,10 @@ class Canvas(app.Canvas):
 
     _frag_glsl_dicts = None
     _pick_glsl_index = None
-    _vol_interp = 'linear'
+    _vol_interp = {
+        'nearest': 'nearest',
+        'linear': 'linear'
+    }.get(os.getenv('VOXEL_SAMPLE').lower(), 'linear')
 
     def __init__(self, filename, reset=True):
         app.Canvas.__init__(
