@@ -37,7 +37,7 @@ class Canvas(app.Canvas):
     _vol_interp = {
         'nearest': 'nearest',
         'linear': 'linear'
-    }.get(os.getenv('VOXEL_SAMPLE').lower(), 'linear')
+    }.get(os.getenv('VOXEL_SAMPLE', '').lower(), 'linear')
 
     def __init__(self, filename, reset=True):
         app.Canvas.__init__(
