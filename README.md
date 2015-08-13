@@ -79,6 +79,7 @@ the console. Did we mention this is experimental code?
 
 Several environment variables can be set to modify the behavior of the `volspy-viewer` tool on a run-by-run basis:
 
+- `VIEW_CHANNEL` specifies an integer channel number in range 0 to N-1 inclusive for N channel images, switching the viewer into single-channel mode and with the specified channel loaded initially. The `c` key can then be used to cycle through channels if desired.
 - `VOXEL_SAMPLE` selects volume rendering texture sampling modes from `nearest` or `linear` (default for unspecified or unrecognized values).
 - `ZYX_SLICE` selects a grid-aligned region of interest to view from the original image grid, e.g. `0:10,100:200,50:800` selects a region of interest where Z<10, 100<=Y<200, and 50<=X<800. (Default slice contains the whole image.)
 - `ZYX_VIEW_GRID` changes the desired rendering grid spacing. Set a preferred ZYX micron spacing, e.g. `0.5,0.5,0.5` which the program will try to approximate using integer bin-averaging of source voxels but it will only reduce grid resolution and never increase it. NOTE: Y and X values should be equal to avoid artifacts with current renderer. (Default grid is 0.25, 0.25, 0.25 micron.)

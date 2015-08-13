@@ -47,7 +47,15 @@ class Canvas(app.Canvas):
 
         self.vol_cropper = ImageManager(filename, self._reform_image)
         nc = self.vol_cropper.data.shape[3]
-        if nc > 4:
+        try:
+            channel = int(os.getenv('VIEW_CHANNEL'))
+        except:
+            channel = None
+
+        if channel is not None and channel >= 0 and channel < nc:
+            print "Starting single-channel mode with user-specified channel %d of %d total channels" % (channel, nc)
+            self.vol_channels = (channel,)
+        elif nc > 4:
             print "%d channel image encountered, switching to single-channel mode" % nc
             self.vol_channels = (0,)
         else:
