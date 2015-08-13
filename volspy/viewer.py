@@ -170,10 +170,16 @@ Resize viewing window using native window-manager controls.
         self.update()
 
     def r_key(self, event):
-        """Reset UI controls with 'Control' modifier."""
+        """Freeze/unfreeze mouse-based rotation; or reset UI controls with 'Control' modifier."""
         if 'Control' in event.modifiers:
             self.reset_ui(event)
-        
+        else:
+            self.toggle_drag_rotate()
+
+    def toggle_drag_rotate(self):
+        self.drag_rotate_enabled = not self.drag_rotate_enabled
+        print "Mouse-based rotation %s." % (self.drag_rotate_enabled and 'ENABLED' or 'DISABLED')
+            
     def reset_ui(self, event=None):
         """Reset UI controls to startup settings."""
         print 'reset_ui'
@@ -182,6 +188,7 @@ Resize viewing window using native window-manager controls.
             self._timer.stop()
             self._timer = None
 
+        self.drag_rotate_enabled = True
         self.view = None
         self.rotation = np.eye(4, dtype=np.float32)
         self.anti_rotation = np.eye(4, dtype=np.float32)
@@ -452,7 +459,7 @@ Resize viewing window using native window-manager controls.
         self.update_view()
         
     def on_mouse_move(self, event):
-        if event.is_dragging:
+        if event.is_dragging and self.drag_rotate_enabled:
             pos0 = np.array(event.press_event.pos, dtype=np.float32)
             pos1 = np.array(event.pos, dtype=np.float32)
             delta = pos1 - pos0
