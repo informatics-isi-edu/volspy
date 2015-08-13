@@ -140,7 +140,8 @@ class Canvas(app.Canvas):
         handlers.sort(key=lambda i: (len(i[0]), ord(i[0][0]), i))
         print """
 Keyboard UI:
-"""
+
+key 'ESC': exit the application."""
         for key, handler in handlers:
             if hasattr(handler, '_keydocs'):
                 doc = handler._keydocs.get(key, handler.__doc__)
@@ -157,8 +158,7 @@ adjustment step than the regular key combinations (with or without
 Mouse UI:
 
 Button 1 drag: Adjust orientation of rendered volume.
-Button 2 drag: Move front clipping-plane along Z viewing axis.
-Button 3 drag: Move slicing plane along Z viewing axis.
+Vertical scroll: Move the clipping or slicing plane up and down the view axis.
 
 Resize viewing window using native window-manager controls.
 """
