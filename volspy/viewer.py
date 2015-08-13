@@ -118,6 +118,7 @@ class Canvas(app.Canvas):
                 ('Z', self.adjust_zoom),
                 ('R', self.r_key),
                 ('F', self.adjust_floor_level),
+                ('=', self.reorient),
                 ('Space', self.toggle_slicing),
                 ('?', self.help)
                 ]
@@ -168,6 +169,28 @@ Resize viewing window using native window-manager controls.
         self.vol_cropper.set_view(channels=self.vol_channels)
         self.vol_cropper.get_texture3d(self.vol_texture)
         self.update()
+
+    def reorient(self, event):
+        """Reorient to view down Z axis; or Y axis with 'Control' modifier; or X axis with 'Alt' modifier."""
+        self.rotation = np.eye(4, dtype=np.float32)
+        self.anti_rotation = np.eye(4, dtype=np.float32)
+
+        if 'Control' in event.modifiers:
+            axis = (1, 0, 0)
+            plane = 'XZ'
+        elif 'Alt' in event.modifiers:
+            axis = (0, 1, 0)
+            plane = 'YZ'
+        else:
+            self.update_view()
+            plane = 'XY'
+            print 'Viewing %s planes.' % plane
+            return
+        
+        rotate(*(self.rotation, 90) + axis)
+        rotate(*(self.anti_rotation, -90) + axis)
+        self.update_view()
+        print 'Viewing %s planes.' % plane
 
     def r_key(self, event):
         """Freeze/unfreeze mouse-based rotation; or reset UI controls with 'Control' modifier."""
