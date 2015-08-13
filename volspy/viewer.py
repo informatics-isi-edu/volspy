@@ -116,7 +116,7 @@ class Canvas(app.Canvas):
                 ('B', self.toggle_color_mode),
                 ('C', self.toggle_channel),
                 ('Z', self.adjust_zoom),
-                ('R', self.reset_ui),
+                ('R', self.r_key),
                 ('F', self.adjust_floor_level),
                 ('Space', self.toggle_slicing),
                 ('?', self.help)
@@ -169,9 +169,13 @@ Resize viewing window using native window-manager controls.
         self.vol_cropper.get_texture3d(self.vol_texture)
         self.update()
 
+    def r_key(self, event):
+        """Reset UI controls with 'Control' modifier."""
+        if 'Control' in event.modifiers:
+            self.reset_ui(event)
+        
     def reset_ui(self, event=None):
         """Reset UI controls to startup settings."""
-        
         print 'reset_ui'
 
         if self._timer is not None:
@@ -305,7 +309,7 @@ Resize viewing window using native window-manager controls.
         if handler:
             handler(event)
             self.update()
-        elif event.key in ['Shift', 'Escape', 'Alt']:
+        elif event.key in ['Shift', 'Escape', 'Alt', 'Control']:
             pass
         else:
             print 'no handler for key %s' % event.key
