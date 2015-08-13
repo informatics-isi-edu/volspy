@@ -54,6 +54,7 @@ class ImageManager (object):
         print "Using %s micron view grid. Override with ZYX_VIEW_GRID='float,float,float'" % (view_grid_microns,)
 
         view_reduction = tuple(map(lambda vs, ps: max(int(ps/vs), 1), voxel_size, view_grid_microns))
+        print "Using %s view reduction factor on %s image grid." % (view_reduction, voxel_size)
             
         # temporary pre-processing hacks to investigate XY-correlated sensor artifacts...
         try:
