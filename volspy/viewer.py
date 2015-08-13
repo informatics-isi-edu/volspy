@@ -112,7 +112,6 @@ class Canvas(app.Canvas):
 
         self.key_press_handlers = dict(
             [
-                ('Q', self.quit),
                 ('P', self.toggle_projection),
                 ('B', self.toggle_color_mode),
                 ('C', self.toggle_channel),
@@ -133,10 +132,6 @@ class Canvas(app.Canvas):
 
         if reset:
             self.reset_ui()
-
-    def quit(self, event=None):
-        """Quit application (same as 'ESC')."""
-        self.close()
 
     def help(self, event=None):
         """Show brief help text for UI."""
