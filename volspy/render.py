@@ -444,8 +444,8 @@ class VolumeRenderer (object):
         self.exit_texture = gloo.Texture2D(shape=(fbo_size + (4,)), internalformat=fbo_format)
         self.pick_texture = gloo.Texture2D(shape=(1, 1, 4), internalformat='rgba')
 
-        self.entry_texture.interpolation = 'linear'
-        self.exit_texture.interpolation = 'linear'
+        self.entry_texture.interpolation = 'nearest'
+        self.exit_texture.interpolation = 'nearest'
         self.pick_texture.interpolation = 'nearest'
     
         if frag_glsl_dicts is None:
