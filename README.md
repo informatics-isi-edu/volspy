@@ -57,6 +57,7 @@ on Mac OSX. It has several requirements:
   - Press the `ESC` key when you have had enough.
   - Press the `?` key to get UI help printed to console output.
   - Click and drag volume with primary mouse button to rotate.
+  - Click and drag volume with secondary mouse button to translate (pan).
   - Press arrow keys with shift modifer to induce continuous rotation.
   - Press number keys `1` to `9` to change intensity gain and with shift modifier to get reciprocal gain.
   - Press keys `f` and `F` to adjust the floor-level image intensity that is mapped to black.

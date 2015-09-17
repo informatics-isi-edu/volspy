@@ -104,10 +104,11 @@ class Canvas(app.Canvas):
         # to allow over-riding by subclasses
         self.drag_button_handlers = {
             1: lambda distance, delta, pos1, basis: self._mouse_drag_rotation(distance, delta),
+            2: lambda distance, delta, pos1, basis: self._mouse_drag_translation(delta)
         }
 
         self.end_drag_handlers = [
-            self._end_drag_rotation,
+            self._end_drag_xform,
             ]
 
         self.key_press_handlers = dict(
@@ -158,7 +159,8 @@ adjustment step than the regular key combinations (with or without
 
 Mouse UI:
 
-Button 1 drag: Adjust orientation of rendered volume.
+Button 1 drag: Rotate rendered volume around origin.
+Button 2 drag: Pan (translate) rendered volume relative to origin.
 Vertical scroll: Move the clipping or slicing plane up and down the view axis.
 
 Resize viewing window using native window-manager controls.
@@ -172,8 +174,8 @@ Resize viewing window using native window-manager controls.
 
     def reorient(self, event):
         """Reorient to view down Z axis; or Y axis with 'Control' modifier; or X axis with 'Alt' modifier."""
-        self.rotation = np.eye(4, dtype=np.float32)
-        self.anti_rotation = np.eye(4, dtype=np.float32)
+        self.xform = np.eye(4, dtype=np.float32)
+        self.anti_xform = np.eye(4, dtype=np.float32)
 
         if 'Control' in event.modifiers:
             axis = (1, 0, 0)
@@ -187,21 +189,21 @@ Resize viewing window using native window-manager controls.
             print 'Viewing %s planes.' % plane
             return
         
-        rotate(*(self.rotation, 90) + axis)
-        rotate(*(self.anti_rotation, -90) + axis)
+        rotate(*(self.xform, 90) + axis)
+        rotate(*(self.anti_xform, -90) + axis)
         self.update_view()
         print 'Viewing %s planes.' % plane
 
     def r_key(self, event):
-        """Freeze/unfreeze mouse-based rotation; or reset UI controls with 'Control' modifier."""
+        """Freeze/unfreeze mouse-based reorientation; or reset UI controls with 'Control' modifier."""
         if 'Control' in event.modifiers:
             self.reset_ui(event)
         else:
-            self.toggle_drag_rotate()
+            self.toggle_drag_reorientation()
 
-    def toggle_drag_rotate(self):
-        self.drag_rotate_enabled = not self.drag_rotate_enabled
-        print "Mouse-based rotation %s." % (self.drag_rotate_enabled and 'ENABLED' or 'DISABLED')
+    def toggle_drag_reorientation(self):
+        self.drag_reorient_enabled = not self.drag_reorient_enabled
+        print "Mouse-based reorientation %s." % (self.drag_reorient_enabled and 'ENABLED' or 'DISABLED')
             
     def reset_ui(self, event=None):
         """Reset UI controls to startup settings."""
@@ -211,10 +213,10 @@ Resize viewing window using native window-manager controls.
             self._timer.stop()
             self._timer = None
 
-        self.drag_rotate_enabled = True
+        self.drag_reorient_enabled = True
         self.view = None
-        self.rotation = np.eye(4, dtype=np.float32)
-        self.anti_rotation = np.eye(4, dtype=np.float32)
+        self.xform = np.eye(4, dtype=np.float32)
+        self.anti_xform = np.eye(4, dtype=np.float32)
         self.scale = np.eye(4, dtype=np.float32)
         self.anti_scale = np.eye(4, dtype=np.float32)
 
@@ -236,8 +238,8 @@ Resize viewing window using native window-manager controls.
         self.auto_rotate_Y_speed = 0
         self.auto_rotate_Z_speed = 0
 
-        self.drag_rotation = None
-        self.drag_anti_rotation = None
+        self.drag_xform = None
+        self.drag_anti_xform = None
 
         self.slice_mode = False
 
@@ -422,22 +424,36 @@ Resize viewing window using native window-manager controls.
 
             angle = 2 * sign
 
-            rotate(*(self.rotation, angle) + axis)
-            rotate(*(self.anti_rotation, -angle) + axis)
+            rotate(*(self.xform, angle) + axis)
+            rotate(*(self.anti_xform, -angle) + axis)
 
             self.update_view()
 
+    def _mouse_drag_translation(self, delta):
+        prev_xform = self.drag_xform
+
+        self.drag_xform = np.eye(4, dtype=np.float32)
+        translate(self.drag_xform, delta[0]/self.zoom, -delta[1]/self.zoom, 0)
+
+        self.drag_anti_xform = np.eye(4, dtype=np.float32)
+        translate(self.drag_anti_xform, -delta[0]/self.zoom, delta[1]/self.zoom, 0)
+
+        if prev_xform is None \
+                or(self.drag_xform != prev_xform).any():
+            self.update_view()
+            self.update()
+        
     def _mouse_drag_rotation(self, distance, delta):
-        prev_rot = self.drag_rotation
+        prev_rot = self.drag_xform
 
-        self.drag_rotation = np.eye(4, dtype=np.float32)
-        rotate(self.drag_rotation, distance * 180, delta[1], delta[0], 0)
+        self.drag_xform = np.eye(4, dtype=np.float32)
+        rotate(self.drag_xform, distance * 180, delta[1], delta[0], 0)
 
-        self.drag_anti_rotation = np.eye(4, dtype=np.float32)
-        rotate(self.drag_anti_rotation, - distance * 180, delta[1], delta[0], 0)
+        self.drag_anti_xform = np.eye(4, dtype=np.float32)
+        rotate(self.drag_anti_xform, - distance * 180, delta[1], delta[0], 0)
 
         if prev_rot is None \
-                or(self.drag_rotation != prev_rot).any():
+                or(self.drag_xform != prev_rot).any():
             self.update_view()
             self.update()
 
@@ -482,7 +498,7 @@ Resize viewing window using native window-manager controls.
         self.update_view()
         
     def on_mouse_move(self, event):
-        if event.is_dragging and self.drag_rotate_enabled:
+        if event.is_dragging and self.drag_reorient_enabled:
             pos0 = np.array(event.press_event.pos, dtype=np.float32)
             pos1 = np.array(event.pos, dtype=np.float32)
             delta = pos1 - pos0
@@ -503,20 +519,20 @@ Resize viewing window using native window-manager controls.
             else:
                 print 'unrecognized mouse button %d' % event.button
 
-    def _end_drag_rotation(self):
-        if self.drag_rotation is not None:
-            self.rotation[...] = np.dot(self.rotation, self.drag_rotation)
-            self.anti_rotation[...] = np.dot(self.drag_anti_rotation, self.anti_rotation)
+    def _end_drag_xform(self):
+        if self.drag_xform is not None:
+            self.xform[...] = np.dot(self.xform, self.drag_xform)
+            self.anti_xform[...] = np.dot(self.drag_anti_xform, self.anti_xform)
 
-            # merge auto-rotation into base rotation to keep stable order w.r.t. drag
-            self.rotation[...] = np.dot(self.rotation, self.auto_rotation)
-            self.anti_rotation[...] = np.dot(self.auto_anti_rotation, self.anti_rotation)
+            # merge auto-rotation into base xform to keep stable order w.r.t. drag
+            self.xform[...] = np.dot(self.xform, self.auto_rotation)
+            self.anti_xform[...] = np.dot(self.auto_anti_rotation, self.anti_xform)
             self.auto_rotate_X_angle = 0.0
             self.auto_rotate_Y_angle = 0.0
             self.auto_rotate_Z_angle = 0.0
         
-            self.drag_rotation = None
-            self.drag_anti_rotation = None
+            self.drag_xform = None
+            self.drag_anti_xform = None
 
             self.update_view()
 
@@ -562,18 +578,18 @@ Resize viewing window using native window-manager controls.
         prev_view = self.view
         view = np.eye(4, dtype=np.float32)
 
-        view[...] = np.dot(view, self.rotation)
-        if self.drag_rotation is not None:
-            view[...] = np.dot(view, self.drag_rotation)
+        view[...] = np.dot(view, self.xform)
+        if self.drag_xform is not None:
+            view[...] = np.dot(view, self.drag_xform)
         view[...] = np.dot(view, self.auto_rotation)
         view[...] = np.dot(view, self.scale)
         translate(view, 0., 0., -1.97) # matched to 60 degree fov
 
         anti_view = np.eye(4, dtype=np.float32)
         anti_view[...] = np.dot(anti_view, self.auto_anti_rotation)
-        if self.drag_rotation is not None:
-            anti_view[...] = np.dot(anti_view, self.drag_anti_rotation)
-        anti_view[...] = np.dot(anti_view, self.anti_rotation)
+        if self.drag_xform is not None:
+            anti_view[...] = np.dot(anti_view, self.drag_anti_xform)
+        anti_view[...] = np.dot(anti_view, self.anti_xform)
 
         self.anti_view = anti_view
         self.volume_renderer.set_vol_view(view, anti_view)
