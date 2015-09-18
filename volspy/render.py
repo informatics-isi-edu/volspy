@@ -498,17 +498,48 @@ class VolumeRenderer (object):
            exclude volume in negative half-space, i.e. with negative
            plane distance.  A value of None disables clipping.
         """
-        # transform (A,B,C) as (X,Y,Z,1)
-        model_plane = np.dot(
-            cube_anti_model,
-            np.dot(
-                np.array(view_plane[0:3] + [1.], dtype=np.float32),
-                self.anti_view
-                )
-            )
-        model_plane = model_plane[0:4]/model_plane[3] # drop W
-        model_plane[0:3] = model_plane[0:3]/np.linalg.norm(model_plane[0:3]) # find new A,B,C
-        model_plane[3] = view_plane[3]  # copy D back into place
+        # normalize (A,B,C,D) to make (A,B,C) a unit vector in world space
+        # and D will be distance from origin in world space
+        view_plane = np.array(view_plane, dtype=np.float32)
+        view_plane = view_plane / np.linalg.norm(view_plane[0:3])
+
+        # map vector into model space by transforming endpoints
+        def world2model(v):
+            m_v = np.dot(cube_anti_model, np.dot(v, self.anti_view))
+            return m_v/m_v[3]
+
+        def sproject(a, b):
+            """Scalar projection of vector a onto b"""
+            return np.dot(a, b) / np.linalg.norm(b)
+        
+        # let P0 be origin, P1 be (A,B,C)
+        w_p0 = np.array([0,0,0,1], dtype=np.float32)
+        w_p1 = np.empty((4,), dtype=np.float32)
+        w_p1[0:3] = view_plane[0:3]
+        w_p1[3] = 1.
+
+        # transform to model space
+        m_p0 = world2model(w_p0)
+        m_p1 = world2model(w_p1)
+        
+        # let P3 be model origin, P4 be (A',B',C')
+        m_p3 = np.array([0,0,0,1], dtype=np.float32)
+        m_p4 = m_p1 - m_p0
+        m_p4[3] = 1.
+
+        # plane in model space is (A',B',C',D')
+        model_plane = m_p4
+        D = view_plane[3]
+        if D < 0.:
+            D_sign = -1
+        else:
+            D_sign = 1
+        # solve for D' by scalar projection of known vectors
+        # 1 = 1 - abs(D) + D' + x
+        # where x is scalar projection of Va onto Vb
+        # where Va is (model_origin - world_origin) and Vb is new unit vector (A',B',C')
+        model_plane[3] = D_sign * (abs(D) - sproject(m_p3[0:3]-m_p0[0:3], m_p4[0:3]))
+
         cube_verts, cube_faces, cut_face = self.vol_cropper.make_cube_clipped(model_plane)
         self.cube_verts.set_data(cube_verts)
         self.volume_faces.set_data(cube_faces, copy=True)
