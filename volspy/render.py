@@ -530,15 +530,8 @@ class VolumeRenderer (object):
         # plane in model space is (A',B',C',D')
         model_plane = m_p4
         D = view_plane[3]
-        if D < 0.:
-            D_sign = -1
-        else:
-            D_sign = 1
-        # solve for D' by scalar projection of known vectors
-        # 1 = 1 - abs(D) + D' + x
-        # where x is scalar projection of Va onto Vb
-        # where Va is (model_origin - world_origin) and Vb is new unit vector (A',B',C')
-        model_plane[3] = D_sign * (abs(D) - sproject(m_p3[0:3]-m_p0[0:3], m_p4[0:3]))
+        # find D' offset from D by scalar projection
+        model_plane[3] = D + sproject(m_p3[0:3]-m_p0[0:3], m_p4[0:3])
 
         cube_verts, cube_faces, cut_face = self.vol_cropper.make_cube_clipped(model_plane)
         self.cube_verts.set_data(cube_verts)
