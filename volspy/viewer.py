@@ -85,7 +85,7 @@ class Canvas(app.Canvas):
             )
 
         self.toggle_color_mode.__func__._keydocs = {
-            'B': 'Cycle through color blending modes %s.' % [
+            'B': 'Cycle through color blending modes %s. Reverse cycle with shift key.' % [
                 frag.get('desc', 'undocumented')
                 for frag in self.volume_renderer.frag_glsl_dicts
             ]
@@ -250,7 +250,8 @@ Resize viewing window using native window-manager controls.
 
     def toggle_color_mode(self, event=None):
         """Cycle through color blending modes."""
-        self.volume_renderer.set_color_mode() # toggles w/o optional argument
+        # toggles w/o optional index
+        self.volume_renderer.set_color_mode(reverse=event is not None and 'Shift' in event.modifiers)
         self.update()
 
     def toggle_channel(self, event=None):

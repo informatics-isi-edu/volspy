@@ -483,9 +483,9 @@ class VolumeRenderer (object):
         self.fbo_pick = gloo.FrameBuffer(self.pick_texture)
         self.anti_view = None
         
-    def set_color_mode(self, i=None):
+    def set_color_mode(self, i=None, reverse=False):
         if i is None:
-            self.color_mode = (self.color_mode + 1) % len(self.prog_ray_casters)
+            self.color_mode = (self.color_mode + (reverse and -1 or 1)) % len(self.prog_ray_casters)
         else:
             self.color_mode = i % len(self.prog_ray_casters)
 
