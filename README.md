@@ -58,7 +58,10 @@ on Mac OSX. It has several requirements:
   - Press the `?` key to get UI help printed to console output.
   - Click and drag volume with primary mouse button to rotate.
   - Click and drag volume with secondary mouse button to translate (pan).
-  - Press arrow keys with shift modifer to induce continuous rotation.
+  - Scroll the vertical scroll wheel to move a clipping or slicing plane up and down the viewing axis.
+  - Press `SPACE` key to enter or exit slicing mode:
+    - Entry to slicing mode repositions slice plane to intersect origin. Use shift modifier to retain current clip distance.
+    - Entry to clipping mode repositions clip plane to near clipping distance. Use shift modifier to retain current slice distance.
   - Press number keys `1` to `9` to change intensity gain and with shift modifier to get reciprocal gain.
   - Press keys `f` and `F` to adjust the floor-level image intensity that is mapped to black.
   - Press `b` key to cycle through color blending modes:
@@ -66,12 +69,6 @@ on Mac OSX. It has several requirements:
     - Additive blend
     - Maximum intensity projection
   - Press `c` key to cycle through channels on images with more than 4 channels.
-  - Click and drag vertically with secondary mouse button to drag a
-    slicing plane through the volume. The plane is perpindicular to
-    the viewing axis and its depth is controlled with the vertical
-    mouse position.
-  - Click and drag vertically with the tertiary mouse button to drag a
-    clipping plane through the volume.
 
 Do not be alarmed by the copious diagnostic outputs streaming out on
 the console. Did we mention this is experimental code?
@@ -80,7 +77,7 @@ the console. Did we mention this is experimental code?
 
 Several environment variables can be set to modify the behavior of the `volspy-viewer` tool on a run-by-run basis:
 
-- `VIEW_CHANNEL` specifies an integer channel number in range 0 to N-1 inclusive for N channel images, switching the viewer into single-channel mode and with the specified channel loaded initially. The `c` key can then be used to cycle through channels if desired.
+- `VIEW_CHANNEL` specifies an integer channel number in range 0 to N-1 inclusive for N channel images, switching the viewer into single-channel mode and with the specified channel loaded initially. The `c` key can then be used to cycle through channels if desired. This mode is entered automatically for images with more than 4 channels.
 - `VOXEL_SAMPLE` selects volume rendering texture sampling modes from `nearest` or `linear` (default for unspecified or unrecognized values).
 - `ZYX_SLICE` selects a grid-aligned region of interest to view from the original image grid, e.g. `0:10,100:200,50:800` selects a region of interest where Z<10, 100<=Y<200, and 50<=X<800. (Default slice contains the whole image.)
 - `ZYX_VIEW_GRID` changes the desired rendering grid spacing. Set a preferred ZYX micron spacing, e.g. `0.5,0.5,0.5` which the program will try to approximate using integer bin-averaging of source voxels but it will only reduce grid resolution and never increase it. NOTE: Y and X values should be equal to avoid artifacts with current renderer. (Default grid is 0.25, 0.25, 0.25 micron.)

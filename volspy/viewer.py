@@ -230,14 +230,6 @@ Resize viewing window using native window-manager controls.
 
         self.clip_distance = -1.96
 
-        # demo-mode rotation about named axes...
-        self.auto_rotate_X_angle = 0.0
-        self.auto_rotate_Y_angle = 0.0
-        self.auto_rotate_Z_angle = 0.0
-        self.auto_rotate_X_speed = 0
-        self.auto_rotate_Y_speed = 0
-        self.auto_rotate_Z_speed = 0
-
         self.drag_xform = None
         self.drag_anti_xform = None
 
@@ -364,12 +356,12 @@ Resize viewing window using native window-manager controls.
         self.update()
 
     @keydoc({
-            'Up': "Decrease rotation (or speed with 'Shift') about X viewing axis.",
-            'Down': "Increase rotation (or speed with 'Shift') about X viewing axis.",
-            'Left': "Decrease rotation (or speed with 'Shift') about Y viewing axis.",
-            'Right': "Increase rotation (or speed with 'Shift') about Y viewing axis.",
-            '[': "Increase rotation (or speed with 'Shift') about Z viewing axis.",
-            ']': "Decrease rotation (or speed with 'Shift') about Z viewing axis.",
+            'Up': "Decrease rotation about X viewing axis.",
+            'Down': "Increase rotation about X viewing axis.",
+            'Left': "Decrease rotation about Y viewing axis.",
+            'Right': "Increase rotation about Y viewing axis.",
+            '[': "Increase rotation about Z viewing axis.",
+            ']': "Decrease rotation about Z viewing axis.",
             '{': False,
             '}': False
             })
@@ -379,56 +371,22 @@ Resize viewing window using native window-manager controls.
 
         print 'adjust_rotate %s' % event
 
-        if event.key == 'S':
-            # stop auto-rotate
-            self.auto_rotate_X_angle = 0.0
-            self.auto_rotate_Y_angle = 0.0
-            self.auto_rotate_Z_angle = 0.0
-            self.auto_rotate_X_speed = 0
-            self.auto_rotate_Y_speed = 0
-            self.auto_rotate_Z_speed = 0
+        # just apply a single small rotation increment
+        axis = {
+            'Up': (1, 0, 0), 
+            'Down': (1, 0, 0), 
+            'Left': (0, 1, 0),
+            'Right': (0, 1, 0),
+            '[': (0, 0, 1),
+            ']': (0, 0, 1)
+        }[event.key]
 
-            if self._timer is not None:
-                self._timer.stop()
-                self._timer = None
+        angle = 2 * sign
 
-        elif 'Shift' in event.modifiers:
-            # adjust auto-rotation speed in small increments
-            if event.key in ('Right', 'Left'):
-                self.auto_rotate_Y_speed += sign
-            elif event.key in ('Up', 'Down'):
-                self.auto_rotate_X_speed += sign
-            elif event.key in ('[', ']', '{', '}'):
-                self.auto_rotate_Z_speed += sign
+        rotate(*(self.xform, angle) + axis)
+        rotate(*(self.anti_xform, -angle) + axis)
 
-            if self.auto_rotate_Z_speed != 0.0 \
-                    or self.auto_rotate_Y_speed != 0.0 \
-                    or self.auto_rotate_X_speed != 0.0:
-                if self._timer is None:
-                    print 'starting timer'
-                    self._timer = app.Timer('auto', connect=self.on_timer, start=True)
-            else:
-                if self._timer is not None:
-                    print 'stopping timer'
-                    self._timer.stop()
-                    self._timer = None
-        else:
-            # just apply a single small rotation increment
-            axis = {
-                'Up': (1, 0, 0), 
-                'Down': (1, 0, 0), 
-                'Left': (0, 1, 0),
-                'Right': (0, 1, 0),
-                '[': (0, 0, 1),
-                ']': (0, 0, 1)
-                }[event.key]
-
-            angle = 2 * sign
-
-            rotate(*(self.xform, angle) + axis)
-            rotate(*(self.anti_xform, -angle) + axis)
-
-            self.update_view()
+        self.update_view()
 
     def _mouse_drag_translation(self, delta):
         prev_xform = self.drag_xform
@@ -525,13 +483,6 @@ Resize viewing window using native window-manager controls.
             self.xform[...] = np.dot(self.xform, self.drag_xform)
             self.anti_xform[...] = np.dot(self.drag_anti_xform, self.anti_xform)
 
-            # merge auto-rotation into base xform to keep stable order w.r.t. drag
-            self.xform[...] = np.dot(self.xform, self.auto_rotation)
-            self.anti_xform[...] = np.dot(self.auto_anti_rotation, self.anti_xform)
-            self.auto_rotate_X_angle = 0.0
-            self.auto_rotate_Y_angle = 0.0
-            self.auto_rotate_Z_angle = 0.0
-        
             self.drag_xform = None
             self.drag_anti_xform = None
 
@@ -545,35 +496,6 @@ Resize viewing window using native window-manager controls.
 
     def update_view(self, on_timer=False):
 
-        self.auto_rotation = np.eye(4, dtype=np.float32)
-        self.auto_anti_rotation = np.eye(4, dtype=np.float32)
-
-        angles = []
-        axes = []
-
-        if on_timer:
-            self.auto_rotate_X_angle += 0.1 * self.auto_rotate_X_speed
-            self.auto_rotate_Y_angle += 0.1 * self.auto_rotate_Y_speed
-            self.auto_rotate_Z_angle += 0.1 * self.auto_rotate_Z_speed
-
-        angles.append(self.auto_rotate_X_angle)
-        axes.append( (1, 0, 0) )
-
-        angles.append(self.auto_rotate_Y_angle)
-        axes.append( (0, 1, 0) )
-
-        angles.append(self.auto_rotate_Z_angle)
-        axes.append( (0, 0, 1) )
-
-        for angle, axis in zip(angles, axes):
-            rotate(*(self.auto_rotation, angle) + axis)
-            
-        angles.reverse()
-        axes.reverse()
-
-        for angle, axis in zip(angles, axes):
-            rotate(*(self.auto_anti_rotation, -angle) + axis)
-
         s = self.vol_cropper.min_pixel_step_size(outtexture=self.vol_texture)
 
         prev_view = self.view
@@ -582,12 +504,10 @@ Resize viewing window using native window-manager controls.
         view[...] = np.dot(view, self.xform)
         if self.drag_xform is not None:
             view[...] = np.dot(view, self.drag_xform)
-        view[...] = np.dot(view, self.auto_rotation)
         view[...] = np.dot(view, self.scale)
         translate(view, 0., 0., -1.97) # matched to 60 degree fov
 
         anti_view = np.eye(4, dtype=np.float32)
-        anti_view[...] = np.dot(anti_view, self.auto_anti_rotation)
         if self.drag_xform is not None:
             anti_view[...] = np.dot(anti_view, self.drag_anti_xform)
         anti_view[...] = np.dot(anti_view, self.anti_xform)
