@@ -17,7 +17,6 @@ from .data import ImageManager
 from .render import maxtexsize, VolumeRenderer, rotate, translate, scale
 from .util import bin_reduce, clamp
 
-
 #gloo.gl.use_gl('pyopengl debug')
 
 
@@ -26,7 +25,23 @@ def keydoc(details):
         original_method._keydocs = details
         return original_method
     return helper
-        
+
+_default_view = np.eye(4, dtype=np.float32)
+_default_anti_view = np.eye(4, dtype=np.float32)
+
+_rotations = os.getenv('VIEW_ROTATE')
+if _rotations:
+    _rotations = map(float, _rotations.split(','))
+    assert len(_rotations) == 3, "VIEW_ROTATE_XYZ must be euler rotations about static X, Y, Z in degrees"
+
+    rotate(*(_default_view, _rotations[0]) + (1, 0, 0))
+    rotate(*(_default_view, _rotations[1]) + (0, 1, 0))
+    rotate(*(_default_view, _rotations[2]) + (0, 0, 1))
+
+    rotate(*(_default_anti_view, 0 - _rotations[2]) + (0, 0, 1))
+    rotate(*(_default_anti_view, 0 - _rotations[1]) + (0, 1, 0))
+    rotate(*(_default_anti_view, 0 - _rotations[0]) + (1, 0, 0))
+
 class Canvas(app.Canvas):
 
     def _reform_image(self, I, meta, view_reduction):
@@ -77,7 +92,7 @@ class Canvas(app.Canvas):
             self.vol_cropper,
             self.vol_texture,
             nc,
-            np.eye(4, dtype=np.float32), # view
+            _default_view.copy(), # view
             (int(maxtexsize * 4), int(maxtexsize * 4)), # fbo_size
             frag_glsl_dicts=self._frag_glsl_dicts,
             pick_glsl_index=self._pick_glsl_index,
@@ -174,8 +189,8 @@ Resize viewing window using native window-manager controls.
 
     def reorient(self, event):
         """Reorient to view down Z axis; or Y axis with 'Control' modifier; or X axis with 'Alt' modifier."""
-        self.xform = np.eye(4, dtype=np.float32)
-        self.anti_xform = np.eye(4, dtype=np.float32)
+        self.xform = _default_view.copy()
+        self.anti_xform = _default_anti_view.copy()
 
         if 'Control' in event.modifiers:
             axis = (1, 0, 0)
@@ -215,8 +230,10 @@ Resize viewing window using native window-manager controls.
 
         self.drag_reorient_enabled = True
         self.view = None
-        self.xform = np.eye(4, dtype=np.float32)
-        self.anti_xform = np.eye(4, dtype=np.float32)
+        
+        self.xform = _default_view.copy()
+        self.anti_xform = _default_anti_view.copy()
+        
         self.scale = np.eye(4, dtype=np.float32)
         self.anti_scale = np.eye(4, dtype=np.float32)
 
@@ -499,7 +516,7 @@ Resize viewing window using native window-manager controls.
         s = self.vol_cropper.min_pixel_step_size(outtexture=self.vol_texture)
 
         prev_view = self.view
-        view = np.eye(4, dtype=np.float32)
+        view = _default_view.copy()
 
         view[...] = np.dot(view, self.xform)
         if self.drag_xform is not None:
@@ -507,7 +524,7 @@ Resize viewing window using native window-manager controls.
         view[...] = np.dot(view, self.scale)
         translate(view, 0., 0., -1.97) # matched to 60 degree fov
 
-        anti_view = np.eye(4, dtype=np.float32)
+        anti_view = _default_anti_view.copy()
         if self.drag_xform is not None:
             anti_view[...] = np.dot(anti_view, self.drag_anti_xform)
         anti_view[...] = np.dot(anti_view, self.anti_xform)

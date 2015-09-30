@@ -77,6 +77,7 @@ the console. Did we mention this is experimental code?
 
 Several environment variables can be set to modify the behavior of the `volspy-viewer` tool on a run-by-run basis:
 
+- `VIEW_ROTATE` specifies degrees of rotation for image about fixed X, Y, Z axis (default `0,0,0`).
 - `VIEW_CHANNEL` specifies an integer channel number in range 0 to N-1 inclusive for N channel images, switching the viewer into single-channel mode and with the specified channel loaded initially. The `c` key can then be used to cycle through channels if desired. This mode is entered automatically for images with more than 4 channels.
 - `VOXEL_SAMPLE` selects volume rendering texture sampling modes from `nearest` or `linear` (default for unspecified or unrecognized values).
 - `ZYX_SLICE` selects a grid-aligned region of interest to view from the original image grid, e.g. `0:10,100:200,50:800` selects a region of interest where Z<10, 100<=Y<200, and 50<=X<800. (Default slice contains the whole image.)
