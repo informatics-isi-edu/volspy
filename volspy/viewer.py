@@ -4,6 +4,7 @@
 # Distributed under the (new) BSD License. See LICENSE.txt for more info.
 #
 
+import sys
 import os
 import numpy as np
 
@@ -57,7 +58,8 @@ class Canvas(app.Canvas):
     def __init__(self, filename, reset=True):
         app.Canvas.__init__(
             self, #vsync=True,
-            keys='interactive'
+            keys='interactive',
+            title='%s %s' % (os.path.basename(sys.argv[0]).replace('-viewer', ''), os.path.basename(filename)),
             )
 
         self.vol_cropper = ImageManager(filename, self._reform_image)
