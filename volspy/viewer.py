@@ -261,18 +261,22 @@ Resize viewing window using native window-manager controls.
 
         self.gain = 1.0
         self.zoom = 1.0
+        self.volume_renderer.uniform_changes['zoom'] = 1.0
         self.floorlvl = 0.1
 
         self.perspective = False
         self.toggle_projection()
+        self.volume_renderer.uniform_changes['projection'] = 'perspective'
         self.volume_renderer.set_color_mode(0)
 
         self.clip_distance = -1.96
+        self.volume_renderer.uniform_changes['clip depth'] = -1.96
 
         self.drag_xform = None
         self.drag_anti_xform = None
 
         self.slice_mode = False
+        self.volume_renderer.uniform_changes['mode'] = 'volumetric'
 
         self.reload_data()
         self.update_view()
@@ -299,9 +303,11 @@ Resize viewing window using native window-manager controls.
         self.perspective = not self.perspective
         if self.perspective:
             self.volume_renderer.set_vol_projection(perspective(60, 1., 100, 0))
+            self.volume_renderer.uniform_changes['projection'] = 'perspective'
         else:
             self.volume_renderer.set_vol_projection(ortho(-1, 1, -1, 1, -1000, 1000))
-
+            self.volume_renderer.uniform_changes['projection'] = 'orthographic'
+            
     def adjust_zoom(self, event):
         """Increase ('Z') or decrease ('z') rendered zoom-level."""
         if 'Shift' in event.modifiers:
@@ -316,6 +322,7 @@ Resize viewing window using native window-manager controls.
         self.reload_data()
         self.update_view()
         self.update()
+        self.volume_renderer.uniform_changes['zoom'] = self.zoom
         print 'adjust_zoom', self.zoom
 
     @keydoc(dict(
@@ -485,20 +492,25 @@ Resize viewing window using native window-manager controls.
         
         if self.clip_distance != prev_clip:
             print 'scroll %s, clip_distance %s' % (event.delta, self.clip_distance)
+            self.volume_renderer.uniform_changes['clip depth'] = self.clip_distance
             self.update_view()
 
     def toggle_slicing(self, event):
         """(Space key) Toggle volume and slicing modes."""
         if not self.slice_mode:
             self.slice_mode = True
+            self.volume_renderer.uniform_changes['mode'] = 'slicing'
             if 'Shift' not in event.modifiers:
                 # set to center for usability?
                 self.clip_distance = 0
+                self.volume_renderer.uniform_changes['clip depth'] = 0
         else:
             self.slice_mode = False
+            self.volume_renderer.uniform_changes['mode'] = 'volumetric'
             if 'Shift' not in event.modifiers:
                 self.clip_distance = -1.96
-                
+                self.volume_renderer.uniform_changes['clip depth'] = -1.96
+        
         self.update_view()
         
     def on_mouse_move(self, event):
