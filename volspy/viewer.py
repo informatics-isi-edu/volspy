@@ -13,6 +13,7 @@ import datetime
 from vispy.util.transforms import perspective, ortho
 from vispy import gloo
 from vispy import app
+from vispy import visuals
 
 from .data import ImageManager
 from .render import maxtexsize, VolumeRenderer, rotate, translate, scale
@@ -149,6 +150,11 @@ class Canvas(app.Canvas):
             
         self.viewport1 = (0, 0) + self.size
 
+        self.text_hud = visuals.TextVisual('', color="white", font_size=12, anchor_x="left")
+        if not hasattr(self.text_hud, 'transforms'):
+            # temporary backwards compatibility
+            self.text_hud_transform = visuals.transforms.TransformSystem(self)
+        
         if reset:
             self.reset_ui()
 
@@ -372,6 +378,12 @@ Resize viewing window using native window-manager controls.
         else:
             self.viewport1 = (width - height)/2, 0, height, height # final ray-casts
 
+        if hasattr(self.text_hud, 'transforms'):
+            self.text_hud.transforms.configure(canvas=self, viewport=self.viewport1)
+        else:
+            # temporary backwards compatibility
+            self.text_hud_transform = visuals.transforms.TransformSystem(self)
+            
         self.update()
 
     @keydoc({
@@ -543,7 +555,8 @@ Resize viewing window using native window-manager controls.
         return view
 
     def on_timer(self, event):
-        self.update_view(True)
+        print 'timer fired'
+        self.update()
 
     def on_draw(self, event, color_mask=(True, True, True, True), pick=None, on_pick=None):
         if self.fps_count >= 10:
@@ -558,7 +571,36 @@ Resize viewing window using native window-manager controls.
         #print 'draw %d' % self.frame
         self.frame += 1
         if self.slice_mode:
-            return self.volume_renderer.draw_slice(self.viewport1, color_mask=color_mask, pick=pick, on_pick=on_pick)
+            result = self.volume_renderer.draw_slice(self.viewport1, color_mask=color_mask, pick=pick, on_pick=on_pick)
         else:
-            return self.volume_renderer.draw_volume(self.viewport1, color_mask=color_mask, pick=pick, on_pick=on_pick)
+            result = self.volume_renderer.draw_volume(self.viewport1, color_mask=color_mask, pick=pick, on_pick=on_pick)
 
+        hud_items = [
+            item for item in self.volume_renderer.uniform_changes.items_aged()
+            if item[0] not in set(['u_picked'])
+        ]
+        if hud_items:
+            hud_text = []
+            hud_pos = []
+        
+            for i in range(len(hud_items)):
+                k, v, ts = hud_items[i]
+                hud_text.append("%s = %s" % (k, v))
+                hud_pos.append( np.array((10, 10 + i * 15)) )
+
+            gloo.set_state(cull_face=False)
+            gloo.set_viewport(self.viewport1)
+            self.text_hud.text = hud_text
+            self.text_hud.pos = hud_pos
+            if hasattr(self.text_hud, 'transforms'):
+                self.text_hud.draw()
+            else:
+                self.text_hud.draw(self.text_hud_transform)
+                
+            if self._timer is not None:
+                self._timer.stop()
+                self._timer = None
+
+            self._timer = app.Timer(interval=hud_items[-1][2], iterations=1, start=True, app=self.app, connect=self.on_timer)
+            
+        return result

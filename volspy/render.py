@@ -20,6 +20,7 @@ from vispy.util.transforms import ortho
 from vispy import gloo
 
 import os
+import datetime
 
 def rotate(M, angle, x, y, z):
     """Apply degrees of rotation about vector.
@@ -423,11 +424,44 @@ void main()
         gloo.Program.draw(self, 'triangles', faces)
 
 
+class RecentUniforms (dict):
+
+    def __init__(self, limit=5, age_s=10):
+        dict.__init__(self)
+        self.limit = limit
+        self.age_s = age_s
+        
+    def __setitem__(self, k, v):
+        return dict.__setitem__(self, k, (v, datetime.datetime.now()))
+
+    def __getitem__(self, k):
+        return dict.__getitem__(self, k)[0]
+
+    def items_aged(self):
+        """Get list of (k, v, secs_remaining) items in ascending age.
+        
+           Stale items are automatically purged from self and from returned list.
+        """
+        now = datetime.datetime.now()
+        L1 = [ (k, v[0], v[1]) for k, v in dict.items(self) ]
+        L2 = []
+        for k, v, ts in L1:
+            age = (now - ts).total_seconds()
+            if age <= self.age_s:
+                L2.append( (k, v, self.age_s - age) )
+            else:
+                # purge stale entries
+                del self[k]
+        L2.sort(key=lambda item: item[2], reverse=True)
+        return L2
+
 class VolumeRenderer (object):
 
     def __init__(self, vol_cropper, vol_texture, num_channels, vol_view, fbo_size=(1024, 1024), zoom=1.0, frag_glsl_dicts=None, pick_glsl_index=None, vol_interp='linear'):
         self.vol_cropper = vol_cropper
 
+        self.uniform_changes = RecentUniforms()
+        
         self.vol_texture = vol_texture
         self.vol_texture.interpolation = vol_interp
         self.vol_texture.wrapping = 'clamp_to_edge'
@@ -542,6 +576,7 @@ class VolumeRenderer (object):
         self.prog_boundary['u_projection'] = projection
 
     def set_uniform(self, name, value):
+        self.uniform_changes[name] = value # track changes
         for prog in self.prog_vol_slicers:
             if name == 'u_gain':
                 prog[name] = value * 4
