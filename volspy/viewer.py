@@ -159,9 +159,9 @@ class Canvas(app.Canvas):
         self.viewport1 = (0, 0) + self.size
 
         try:
-            self.font_scale = float(os.getenv('FONT_SCALE', 2))
+            self.font_scale = float(os.getenv('FONT_SCALE', 1))
         except:
-            print 'Invalid FONT_SCALE "%s", using 2.0 instead'
+            print 'Invalid FONT_SCALE "%s", using 1.0 instead'
             self.font_scale = 2.0
             
         self.text_hud = visuals.TextVisual('', color="white", font_size=12 * self.font_scale, anchor_x="left", bold=True)
