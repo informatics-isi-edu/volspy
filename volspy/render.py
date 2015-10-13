@@ -438,7 +438,7 @@ class RecentUniforms (dict):
         return dict.__getitem__(self, k)[0]
 
     def items_aged(self):
-        """Get list of (k, v, secs_remaining) items in ascending age.
+        """Get list of (k, v, secs_remaining) items in descending age.
         
            Stale items are automatically purged from self and from returned list.
         """
@@ -452,7 +452,7 @@ class RecentUniforms (dict):
             else:
                 # purge stale entries
                 del self[k]
-        L2.sort(key=lambda item: item[2], reverse=True)
+        L2.sort(key=lambda item: item[2])
         return L2
 
 class VolumeRenderer (object):
