@@ -147,7 +147,15 @@ class Canvas(app.Canvas):
                 for k in [ 'Left', 'Right', 'Up', 'Down', '[', ']', '{', '}' ]
                 ]
             )
-            
+
+        self.hud_display_names = {
+            'u_picked': None,
+            'u_floorlvl': 'zero point',
+            'u_gain': 'gain',
+        }
+
+        self.hud_value_rewrite = {}
+        
         self.viewport1 = (0, 0) + self.size
 
         self.text_hud = visuals.TextVisual('', color="white", font_size=12, anchor_x="left")
@@ -576,8 +584,13 @@ Resize viewing window using native window-manager controls.
             result = self.volume_renderer.draw_volume(self.viewport1, color_mask=color_mask, pick=pick, on_pick=on_pick)
 
         hud_items = [
-            item for item in self.volume_renderer.uniform_changes.items_aged()
-            if item[0] not in set(['u_picked'])
+            (
+                self.hud_display_names.get(k,k),
+                self.hud_value_rewrite.get(k,lambda x: x)(v),
+                a
+            )
+            for k, v, a in self.volume_renderer.uniform_changes.items_aged()
+            if self.hud_display_names.get(k,k) is not None
         ]
         if hud_items:
             hud_text = []
@@ -585,8 +598,14 @@ Resize viewing window using native window-manager controls.
         
             for i in range(len(hud_items)):
                 k, v, ts = hud_items[i]
-                hud_text.append("%s = %s" % (k, v))
-                hud_pos.append( np.array((10, 10 + i * 15)) )
+                if type(v) in (float, np.float32, np.float64):
+                    v = "%.2f" % v
+                if v is not None:
+                    ht = "%s: %s" % (k, v)
+                else:
+                    ht = k
+                hud_text.append(ht)
+                hud_pos.append( np.array((5 * self.font_scale, (12 + i * 15) * self.font_scale)) )
 
             gloo.set_state(cull_face=False)
             gloo.set_viewport(self.viewport1)
