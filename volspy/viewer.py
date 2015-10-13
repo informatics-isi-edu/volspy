@@ -638,6 +638,6 @@ Resize viewing window using native window-manager controls.
                 self._timer.stop()
                 self._timer = None
 
-            self._timer = app.Timer(interval=hud_items[-1][2], iterations=1, start=True, app=self.app, connect=self.on_timer)
+            self._timer = app.Timer(interval=hud_items[0][2], iterations=1, start=True, app=self.app, connect=self.on_timer)
             
         return result
