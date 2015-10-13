@@ -400,7 +400,7 @@ Resize viewing window using native window-manager controls.
             self.viewport1 = (width - height)/2, 0, height, height # final ray-casts
 
         if hasattr(self.text_hud, 'transforms'):
-            self.text_hud.transforms.configure(canvas=self, viewport=self.viewport1)
+            self.text_hud.transforms.configure(canvas=self, viewport=(0, 0) + self.size)
         else:
             # temporary backwards compatibility
             self.text_hud_transform = visuals.transforms.TransformSystem(self)
@@ -626,7 +626,7 @@ Resize viewing window using native window-manager controls.
                 hud_pos.append( np.array((5 * self.font_scale, (12 + i * 15) * self.font_scale)) )
 
             gloo.set_state(cull_face=False)
-            gloo.set_viewport(self.viewport1)
+            gloo.set_viewport((0, 0,) + self.size)
             self.text_hud.text = hud_text
             self.text_hud.pos = hud_pos
             if hasattr(self.text_hud, 'transforms'):
