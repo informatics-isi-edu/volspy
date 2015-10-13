@@ -158,7 +158,13 @@ class Canvas(app.Canvas):
         
         self.viewport1 = (0, 0) + self.size
 
-        self.text_hud = visuals.TextVisual('', color="white", font_size=12, anchor_x="left")
+        try:
+            self.font_scale = float(os.getenv('FONT_SCALE', 2))
+        except:
+            print 'Invalid FONT_SCALE "%s", using 2.0 instead'
+            self.font_scale = 2.0
+            
+        self.text_hud = visuals.TextVisual('', color="white", font_size=12 * self.font_scale, anchor_x="left", bold=True)
         if not hasattr(self.text_hud, 'transforms'):
             # temporary backwards compatibility
             self.text_hud_transform = visuals.transforms.TransformSystem(self)
