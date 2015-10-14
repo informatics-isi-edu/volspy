@@ -148,6 +148,8 @@ class Canvas(app.Canvas):
                 ]
             )
 
+        self.hud_enable = os.getenv('HUD_ENABLE', 'true').lower() != 'false' and True or False
+        
         self.hud_display_names = {
             'u_picked': None,
             'u_floorlvl': 'zero point',
@@ -618,12 +620,21 @@ Resize viewing window using native window-manager controls.
                 k, v, ts = hud_items[i]
                 if type(v) in (float, np.float32, np.float64):
                     v = "%.2f" % v
-                if v is not None:
+                if type(k) is int:
+                    # hack: support alerts/notices grouped by integer key from subclasses
+                    ht = v
+                elif v is not None and self.hud_enable:
+                    # regular uniform changes unless HUD_ENABLE=false
                     ht = "%s: %s" % (k, v)
-                else:
+                elif v is None:
+                    # hack: alerts/notices without keys from subclasses
                     ht = k
-                hud_text.append(ht)
-                hud_pos.append( np.array((5 * self.font_scale, (12 + i * 15) * self.font_scale)) )
+                else:
+                    ht = None
+                    
+                if ht is not None:
+                    hud_text.append(ht)
+                    hud_pos.append( np.array((5 * self.font_scale, (12 + len(hud_text) * 15) * self.font_scale)) )
 
             gloo.set_state(cull_face=False)
             gloo.set_viewport((0, 0,) + self.size)
