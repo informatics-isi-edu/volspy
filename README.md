@@ -3,7 +3,10 @@
 [Volspy](http://github.com/informatics-isi-edu/volspy) is an
 interactive volume visualization tool. Volspy is being developed to
 support research involving 3D fluorescence microscopy imaging, but may
-be applicable to other 3D images as well.
+be applicable to other 3D images as well. Volspy is primarily used by
+its authors as a framework for other projects such as
+[Synspy](http://github.com/informatics-isi-edu/synspy), an interactive
+synaptic visualization and classification tool.
 
 ## Screenshots
 
