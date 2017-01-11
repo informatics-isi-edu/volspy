@@ -42,19 +42,27 @@ class ImageManager (object):
         I, self.meta = load_image(filename)
 
         try:
-            voxel_size = I.micron_spacing
-        except AttributeError:
-            voxel_size = (1., 1., 1.)
+            voxel_size = tuple(map(float, os.getenv('ZYX_IMAGE_GRID').split(",")))
+            print "ZYX_IMAGE_GRID environment forces image grid of %s micron." % (voxel_size,)
+            assert len(voxel_size) == 3
+        except:
+            try:
+                voxel_size = I.micron_spacing
+                print "Using detected %s micron image grid." % (voxel_size,)
+            except AttributeError:
+                print "ERROR: could not determine image grid spacing. Use ZYX_IMAGE_GRID=Z,Y,X to override."
+                raise
 
         try:
             view_grid_microns = tuple(map(float, os.getenv('ZYX_VIEW_GRID').split(",")))
             assert len(view_grid_microns) == 3
         except:
             view_grid_microns = (0.25, 0.25, 0.25)
-        print "Using %s micron view grid. Override with ZYX_VIEW_GRID='float,float,float'" % (view_grid_microns,)
+        print "Goal is %s micron view grid. Override with ZYX_VIEW_GRID='float,float,float'" % (view_grid_microns,)
 
         view_reduction = tuple(map(lambda vs, ps: max(int(ps/vs), 1), voxel_size, view_grid_microns))
         print "Using %s view reduction factor on %s image grid." % (view_reduction, voxel_size)
+        print "Final %s micron view grid after reduction." % (tuple(map(lambda vs, r: vs*r, voxel_size, view_reduction)),)
             
         # temporary pre-processing hacks to investigate XY-correlated sensor artifacts...
         try:
