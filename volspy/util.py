@@ -115,7 +115,7 @@ class TiffLazyNDArray (object):
         
         self.stack_ndim = len(tfimg.shape) - len(page0.shape)
         self.stack_shape = tfimg.shape[0:self.stack_ndim]
-        print "TIFF %s %s %s, page0 %s, stack %s?" % (tfimg.shape, tfimg.axes, tfimg.dtype, page0.shape, self.stack_shape)
+        print "TIFF %s %s %s, page0 %s, stack %s, axes %s?" % (tfimg.shape, tfimg.axes, tfimg.dtype, page0.shape, self.stack_shape, tfimg.axes)
         assert reduce(lambda a,b: a*b, self.stack_shape, 1) == len(tfimg.pages)
         assert tfimg.shape[self.stack_ndim:] == page0.shape, "TIFF page packing structure not understood"
 
@@ -381,7 +381,7 @@ class TiffLazyNDArray (object):
 
 def canonicalize(data):
     """Restructure to preferred TCZYX or CZYX form..."""
-    data = data.transpose(*[d for d in map(data.axes.find, 'TCZYX') if d >= 0])
+    data = data.transpose(*[d for d in map(data.axes.find, 'TCIZYX') if d >= 0])
     projection = []
 
     if 'T' in data.axes and data.shape[0] == 1:
@@ -406,7 +406,8 @@ def load_tiff(fname):
     data = TiffLazyNDArray(fname)
     try:
         data = canonicalize(data)
-    except:
+    except Exception, e:
+        print e
         # special case for raw TIFF (not LSM, not OME)
         if data.ndim == 3:
             data = data[(None,slice(None),slice(None),slice(None))] # add fake color dimension
@@ -416,7 +417,8 @@ def load_tiff(fname):
     try:
         z_microns, y_microns, x_microns = data.micron_spacing
         md = ImageMetadata(x_microns, y_microns, z_microns, data.axes)
-    except AttributeError:
+    except AttributeError, e:
+        print 'got error %s fetching metadata during load_tiff' % e
         md = None
     return data, md
 
