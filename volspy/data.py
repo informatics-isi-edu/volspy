@@ -67,7 +67,7 @@ class ImageManager (object):
         # temporary pre-processing hacks to investigate XY-correlated sensor artifacts...
         try:
             ntile = int(os.getenv('ZNOISE_PERCENTILE'))
-            I = I.force()
+            I = I.force().astype(np.float32)
             zerofield = np.percentile(I, ntile, axis=1)
             print 'Image %d percentile value over Z-axis ranges [%f,%f]' % (ntile, zerofield.min(), zerofield.max())
             I -= zerofield
