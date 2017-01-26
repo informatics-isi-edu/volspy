@@ -1,6 +1,6 @@
 
 #
-# Copyright 2015 University of Southern California
+# Copyright 2015-2017 University of Southern California
 # Distributed under the (new) BSD License. See LICENSE.txt for more info.
 #
 
@@ -20,8 +20,13 @@ Sub-modules:
 
 """
 
-import data
-import geometry
-import render
 import util
-import viewer
+
+try:
+    import data
+    import geometry
+    import render
+    import viewer
+except ImportError, e:
+    import sys
+    sys.stderr.write("WARNING: %s\n" % e)
