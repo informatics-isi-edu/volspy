@@ -82,6 +82,7 @@ class ImageManager (object):
 
         # allow user to select a bounding box region of interest
         bbox = os.getenv('ZYX_SLICE')
+        self.slice_origin = (0, 0, 0)
         if bbox:
             bbox = bbox.split(",")
             assert len(bbox) == 3, "ZYX_SLICE must have comma-separated slices for 3 axes Z,Y,X"
@@ -96,11 +97,11 @@ class ImageManager (object):
                 bbox,
                 view_reduction
             )) + (slice(None),)
-            datamin = I.min()
-            datamax = I.max()
-            I = I[bbox]
-            I[0,0,0,0] = datamin
-            I[-1,-1,-1,0] = datamax
+            I = I.lazyget(bbox)
+            self.slice_origin = tuple(map(
+                lambda slc: slc.start or 0,
+                bbox[0:3]
+            ))
 
         if I.shape[2] % 16:
             # trim for 16-pixel row alignment
