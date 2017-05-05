@@ -1,11 +1,11 @@
 
 #
-# Copyright 2014-2015 University of Southern California
+# Copyright 2014-2017 University of Southern California
 # Distributed under the (new) BSD License. See LICENSE.txt for more info.
 #
 
 from collections import namedtuple
-
+import os
 import numpy as np
 import tifffile
 from tifffile import lazyattr
@@ -428,3 +428,100 @@ def load_image(fname):
        Keep temporarily for backward-compatibility...
     """
     return load_tiff(fname)
+
+class wrapper (np.ndarray):
+    """Subtype to allow extra attributes"""
+    pass
+
+def load_and_mangle_image(fname):
+    """Load and mangle TIFF image file.
+
+       Arguments:
+         fname: LSM or OME-TIFF input file name
+
+       Environment parameters:
+         ZYX_SLICE: selects ROI within full image
+         ZYX_IMAGE_GRID: overrides image grid step metadata
+         ZNOISE_PERCENTILE: see source
+         ZNOISE_ZERO_LEVEL: see source
+
+       Results tuple fields:
+         image
+         meta
+         slice_origin
+    """
+    I, meta = load_image(fname)
+
+    try:
+        voxel_size = tuple(map(float, os.getenv('ZYX_IMAGE_GRID').split(",")))
+        print "ZYX_IMAGE_GRID environment forces image grid of %s micron." % (voxel_size,)
+        assert len(voxel_size) == 3
+    except:
+        try:
+            voxel_size = I.micron_spacing
+            print "Using detected %s micron image grid." % (voxel_size,)
+        except AttributeError:
+            print "ERROR: could not determine image grid spacing. Use ZYX_IMAGE_GRID=Z,Y,X to override."
+            raise
+
+    setattr(I, 'micron_spacing', voxel_size)
+
+    # temporary pre-processing hacks to investigate XY-correlated sensor artifacts...
+    try:
+        ntile = int(os.getenv('ZNOISE_PERCENTILE'))
+        I = I.force().astype(np.float32)
+        zerofield = np.percentile(I, ntile, axis=1)
+        print 'Image %d percentile value over Z-axis ranges [%f,%f]' % (ntile, zerofield.min(), zerofield.max())
+        I -= zerofield
+        print 'Image offset by %d percentile XY value to new range [%f,%f]' % (ntile, I.min(), I.max())
+        zero = float(os.getenv('ZNOISE_ZERO_LEVEL'), 0)
+        I = I * (I >= 0.)
+        print 'Image clamped to range [%f,%f]' % (I.min(), I.max())
+    except:
+        pass
+
+    I = I.transpose(1,2,3,0)
+
+    # allow user to select a bounding box region of interest
+    bbox = os.getenv('ZYX_SLICE')
+    slice_origin = (0, 0, 0)
+    if bbox:
+        bbox = bbox.split(",")
+        assert len(bbox) == 3, "ZYX_SLICE must have comma-separated slices for 3 axes Z,Y,X"
+        bbox = [s.split(":") for s in bbox]
+        for p in bbox:
+            assert len(p) == 2, "ZYX_SLICE must have START:STOP pair for each axial slice"
+        for start, stop in bbox:
+            assert int(start) >= 0, "ZYX_SLICE START must be 0 or greater"
+            assert int(stop) >= 1, "ZYX_SLICE STOP must be 1 or greater"
+        bbox = tuple(map(
+            lambda slc: slice(int(slc[0]), int(slc[1])),
+            bbox
+        )) + (slice(None),)
+        I = I.lazyget(bbox)
+        slice_origin = tuple(map(
+            lambda slc: slc.start or 0,
+            bbox[0:3]
+        ))
+
+    if I.shape[2] % 16:
+        # trim for 16-pixel row alignment
+        slc = tuple([
+            slice(None),
+            slice(None),
+            slice(0,I.shape[2]/16*16),
+            slice(None)
+        ])
+        if hasattr(I, 'lazyget'):
+            I = I.lazyget(slc)
+        else:
+            I = I[slc]
+
+    if isinstance(I, np.ndarray):
+        # temporarily maintain micron_spacing after munging above...
+        I2 = wrapper(shape=I.shape, dtype=I.dtype)
+        I2[:,:,:,:] = I[:,:,:,:]
+        I = I2
+        setattr(I, 'micron_spacing', voxel_size)
+
+    return I, meta, slice_origin
