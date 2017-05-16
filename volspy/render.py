@@ -495,14 +495,8 @@ class VolumeRenderer (object):
             pick_glsl_index = None
 
         # build slicers and ray casters with GLSL code dictionaries
-        self.prog_vol_slicers = map(
-            lambda parts: VolumeSliceProgram(self.vol_texture, num_channels, self.entry_texture, zoom, parts),
-            frag_glsl_dicts
-            )
-        self.prog_ray_casters = map(
-            lambda parts: VolumeRayCastProgram(self.vol_texture, num_channels, self.entry_texture, self.exit_texture, zoom, parts), 
-            frag_glsl_dicts
-            )
+        self.prog_vol_slicers = [VolumeSliceProgram(self.vol_texture, num_channels, self.entry_texture, zoom, parts) for parts in frag_glsl_dicts]
+        self.prog_ray_casters = [VolumeRayCastProgram(self.vol_texture, num_channels, self.entry_texture, self.exit_texture, zoom, parts) for parts in frag_glsl_dicts]
 
         self.frag_glsl_dicts = frag_glsl_dicts
         self.pick_glsl_index = pick_glsl_index
@@ -523,7 +517,7 @@ class VolumeRenderer (object):
         else:
             self.color_mode = i % len(self.prog_ray_casters)
 
-        print 'color mode %d %s' % (self.color_mode, self.frag_glsl_dicts[self.color_mode].get('desc', ''))
+        print('color mode %d %s' % (self.color_mode, self.frag_glsl_dicts[self.color_mode].get('desc', '')))
 
     def set_clip_plane(self, view_plane):
         """Set clipping plane in view coordinate space.
@@ -701,4 +695,4 @@ class VolumeRenderer (object):
         self.prog_vol_slicers[self.color_mode].draw()
 
         return pick_out
-    
+

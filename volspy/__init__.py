@@ -20,13 +20,13 @@ Sub-modules:
 
 """
 
-import util
+from . import util
 
 try:
-    import data
-    import geometry
-    import render
-    import viewer
-except ImportError, e:
+    from . import data
+    from . import geometry
+    from . import render
+    from . import viewer
+except ImportError as e:
     import sys
     sys.stderr.write("WARNING: %s\n" % e)

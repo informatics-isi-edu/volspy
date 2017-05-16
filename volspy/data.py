@@ -44,16 +44,16 @@ class ImageManager (object):
             assert len(view_grid_microns) == 3
         except:
             view_grid_microns = (0.25, 0.25, 0.25)
-        print "Goal is %s micron view grid. Override with ZYX_VIEW_GRID='float,float,float'" % (view_grid_microns,)
+        print("Goal is %s micron view grid. Override with ZYX_VIEW_GRID='float,float,float'" % (view_grid_microns,))
 
         view_reduction = tuple(map(lambda vs, ps: max(int(ps/vs), 1), voxel_size, view_grid_microns))
-        print "Using %s view reduction factor on %s image grid." % (view_reduction, voxel_size)
-        print "Final %s micron view grid after reduction." % (tuple(map(lambda vs, r: vs*r, voxel_size, view_reduction)),)
+        print("Using %s view reduction factor on %s image grid." % (view_reduction, voxel_size))
+        print("Final %s micron view grid after reduction." % (tuple(map(lambda vs, r: vs*r, voxel_size, view_reduction)),))
 
         if reform_data is not None:
             I = reform_data(I, self.meta, view_reduction)
 
-        voxel_size = map(lambda a, b: a*b, voxel_size, view_reduction)
+        voxel_size = list(map(lambda a, b: a*b, voxel_size, view_reduction))
         self.Zaspect = voxel_size[0] / voxel_size[2]
 
         self.data = I
@@ -99,7 +99,7 @@ class ImageManager (object):
             bps = 2
             #bps = 4
 
-        print (nc, bps)
+        print((nc, bps))
         return {
             (1,1): ('luminance', 'red'),
             (1,2): ('luminance', 'r16f'),
@@ -132,15 +132,15 @@ class ImageManager (object):
 
         if outtexture is None:
             format, internalformat = self._get_texture3d_format()
-            print 'allocating texture3D', (D, H, W, C), internalformat
+            print('allocating texture3D', (D, H, W, C), internalformat)
             outtexture = gloo.Texture3D(shape=(D, H, W, C), format=format, internalformat=internalformat)
         elif self.last_channels == self.channels:
-            print 'reusing texture'
+            print('reusing texture')
             return outtexture
         else:
-            print 'regenerating texture'
+            print('regenerating texture')
 
-        print (D, H, W, C), '<-', I0.shape, list(self.channels), I0.dtype
+        print((D, H, W, C), '<-', I0.shape, list(self.channels), I0.dtype)
 
         # normalize for OpenGL [0,1.0] or [0,2**N-1] and zero black-level
         maxval = I0.max()
