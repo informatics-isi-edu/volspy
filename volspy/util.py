@@ -100,7 +100,7 @@ class TiffLazyNDArray (object):
 
     def __init__(self, src, _output_plan=None):
         """Wrap an image source given by filename or an existing tifffile.TiffFile instance."""
-        if type(src) in [str, str]:
+        if isinstance(src, str):
             self.tf = tifffile.TiffFile(src)
         elif isinstance(src, tifffile.TiffFile):
             self.tf = src
@@ -495,9 +495,15 @@ def load_and_mangle_image(fname):
         for start, stop in bbox:
             assert int(start) >= 0, "ZYX_SLICE START must be 0 or greater"
             assert int(stop) >= 1, "ZYX_SLICE STOP must be 1 or greater"
-        bbox = tuple([slice(int(slc[0]), int(slc[1])) for slc in bbox]) + (slice(None),)
+        bbox = tuple([
+            slice(int(slc[0]), int(slc[1]))
+            for slc in bbox
+        ]) + (slice(None),)
         I = I.lazyget(bbox)
-        slice_origin = tuple([slc.start or 0 for slc in bbox[0:3]])
+        slice_origin = tuple([
+            slc.start or 0
+            for slc in bbox[0:3]
+        ])
 
     if I.shape[2] % 16:
         # trim for 16-pixel row alignment
