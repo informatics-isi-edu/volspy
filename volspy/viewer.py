@@ -33,7 +33,7 @@ _default_anti_view = np.eye(4, dtype=np.float32)
 
 _rotations = os.getenv('VIEW_ROTATE')
 if _rotations:
-    _rotations = map(float, _rotations.split(','))
+    _rotations = list(map(float, _rotations.split(',')))
     assert len(_rotations) == 3, "VIEW_ROTATE_XYZ must be euler rotations about static X, Y, Z in degrees"
 
     rotate(*(_default_view, _rotations[0]) + (1, 0, 0))
@@ -71,13 +71,13 @@ class Canvas(app.Canvas):
             channel = None
 
         if channel is not None and channel >= 0 and channel < nc:
-            print "Starting single-channel mode with user-specified channel %d of %d total channels" % (channel, nc)
+            print("Starting single-channel mode with user-specified channel %d of %d total channels" % (channel, nc))
             self.vol_channels = (channel,)
         elif nc > 4:
-            print "%d channel image encountered, switching to single-channel mode" % nc
+            print("%d channel image encountered, switching to single-channel mode" % nc)
             self.vol_channels = (0,)
         else:
-            print "%d channel image encountered, using direct %d-channel mapping" % (nc, nc)
+            print("%d channel image encountered, using direct %d-channel mapping" % (nc, nc))
             self.vol_channels = None
         self.vol_cropper.set_view(channels=self.vol_channels)
         self.vol_texture = self.vol_cropper.get_texture3d()
@@ -163,7 +163,7 @@ class Canvas(app.Canvas):
         try:
             self.font_scale = float(os.getenv('FONT_SCALE', 1))
         except:
-            print 'Invalid FONT_SCALE "%s", using 1.0 instead'
+            print('Invalid FONT_SCALE "%s", using 1.0 instead')
             self.font_scale = 2.0
             
         self.text_hud = visuals.TextVisual('', color="white", font_size=12 * self.font_scale, anchor_x="left", bold=True)
@@ -177,21 +177,21 @@ class Canvas(app.Canvas):
     def help(self, event=None):
         """Show brief help text for UI."""
         
-        handlers = self.key_press_handlers.items()
+        handlers = list(self.key_press_handlers.items())
         handlers.sort(key=lambda i: (len(i[0]), ord(i[0][0]), i))
-        print """
+        print("""
 Keyboard UI:
 
-key 'ESC': exit the application."""
+key 'ESC': exit the application.""")
         for key, handler in handlers:
             if hasattr(handler, '_keydocs'):
                 doc = handler._keydocs.get(key, handler.__doc__)
             else:
                 doc = handler.__doc__
             if doc is not False:
-                print "key '%s': %s" % (key, doc)
+                print("key '%s': %s" % (key, doc))
 
-        print """
+        print("""
 for some keyboard commands, adding the 'Alt' modifier allows a finer
 adjustment step than the regular key combinations (with or without
 'Shift' modifier)!
@@ -203,7 +203,7 @@ Button 2 drag: Pan (translate) rendered volume relative to origin.
 Vertical scroll: Move the clipping or slicing plane up and down the view axis.
 
 Resize viewing window using native window-manager controls.
-"""
+""")
         
 
     def reload_data(self):
@@ -225,13 +225,13 @@ Resize viewing window using native window-manager controls.
         else:
             self.update_view()
             plane = 'XY'
-            print 'Viewing %s planes.' % plane
+            print('Viewing %s planes.' % plane)
             return
         
         rotate(*(self.xform, 90) + axis)
         rotate(*(self.anti_xform, -90) + axis)
         self.update_view()
-        print 'Viewing %s planes.' % plane
+        print('Viewing %s planes.' % plane)
 
     def r_key(self, event):
         """Freeze/unfreeze mouse-based reorientation; or reset UI controls with 'Control' modifier."""
@@ -242,11 +242,11 @@ Resize viewing window using native window-manager controls.
 
     def toggle_drag_reorientation(self):
         self.drag_reorient_enabled = not self.drag_reorient_enabled
-        print "Mouse-based reorientation %s." % (self.drag_reorient_enabled and 'ENABLED' or 'DISABLED')
+        print("Mouse-based reorientation %s." % (self.drag_reorient_enabled and 'ENABLED' or 'DISABLED'))
             
     def reset_ui(self, event=None):
         """Reset UI controls to startup settings."""
-        print 'reset_ui'
+        print('reset_ui')
 
         if self._timer is not None:
             self._timer.stop()
@@ -298,7 +298,7 @@ Resize viewing window using native window-manager controls.
             c = self.vol_channels[0]
             self.vol_channels = ((c+1)%nc,)
             self.reload_data()
-            print "viewing channel %d of %d (zero-based)" % (c, nc)
+            print("viewing channel %d of %d (zero-based)" % (c, nc))
 
     def toggle_projection(self, event=None):
         """Toggle between perspective and orthonormal projection modes."""
@@ -325,8 +325,9 @@ Resize viewing window using native window-manager controls.
         self.update_view()
         self.update()
         self.volume_renderer.uniform_changes['zoom'] = self.zoom
-        print 'adjust_zoom', self.zoom
+        print('adjust_zoom', self.zoom)
 
+    k = None
     @keydoc(dict(
             [ (k, "Set gain to %d or 1/%d (with 'Shift')." % (int(k), int(k))) for k in '123456789' ]
             + [ ('0', "set gain to 10 or 1/10 (with 'Shift').") ]
@@ -334,7 +335,7 @@ Resize viewing window using native window-manager controls.
             ))
     def adjust_gain(self, event):
         """Increase ('G') or decrease ('g') linear gain of rendered data."""
-        print 'adjust_gain'
+        print('adjust_gain')
         def numkey(key):
             for i in range(10):
                 if key == '%d' % i:
@@ -360,11 +361,11 @@ Resize viewing window using native window-manager controls.
         elif event.key in shift_keys:
             self.gain = 1/float(shift_keys[event.key])
         else:
-            print 'event %s not understood as gain adjustment' % event
+            print('event %s not understood as gain adjustment' % event)
 
         self.volume_renderer.set_uniform('u_gain', self.gain)
         self.update()
-        print 'gain set to %.2f' % self.gain
+        print('gain set to %.2f' % self.gain)
 
     def adjust_floor_level(self, event):
         """Increase ('F') or decrease ('f') floor-level used in alpha-transfer function."""
@@ -374,7 +375,7 @@ Resize viewing window using native window-manager controls.
             self.floorlvl -= 0.005
         self.volume_renderer.set_uniform('u_floorlvl', self.floorlvl)
         self.update()
-        print 'floor level set to %.2f' % self.floorlvl
+        print('floor level set to %.2f' % self.floorlvl)
 
     def on_key_press(self, event):
         handler = self.key_press_handlers.get(event.key)
@@ -385,7 +386,7 @@ Resize viewing window using native window-manager controls.
         elif event.key in ['Shift', 'Escape', 'Alt', 'Control']:
             pass
         else:
-            print 'no handler for key %s' % event.key
+            print('no handler for key %s' % event.key)
 
     def on_resize(self, event):
         width, height = event.size
@@ -393,7 +394,7 @@ Resize viewing window using native window-manager controls.
         if self.prev_size == event.size:
             return
 
-        print "window resize", event.size
+        print("window resize", event.size)
         self.prev_size = event.size
 
         if float(width) / float(height) > 1.0:
@@ -423,7 +424,7 @@ Resize viewing window using native window-manager controls.
         """Adjust rotation of rendered data."""
         sign = {'Up':-1, 'Left':-1, ']':-1, '}':-1}.get(event.key, 1)
 
-        print 'adjust_rotate %s' % event
+        print('adjust_rotate %s' % event)
 
         # just apply a single small rotation increment
         axis = {
@@ -493,7 +494,7 @@ Resize viewing window using native window-manager controls.
         self.clip_distance = clamp(self.clip_distance - event.delta[1]/basis, -1.96, 1.96)
         
         if self.clip_distance != prev_clip:
-            print 'scroll %s, clip_distance %s' % (event.delta, self.clip_distance)
+            print('scroll %s, clip_distance %s' % (event.delta, self.clip_distance))
             self.volume_renderer.uniform_changes['clip depth'] = self.clip_distance
             self.update_view()
 
@@ -535,7 +536,7 @@ Resize viewing window using native window-manager controls.
                     (event.button + self.mouse_button_offset)
                     ](distance, delta, pos1, basis)
             else:
-                print 'unrecognized mouse button %d' % event.button
+                print('unrecognized mouse button %d' % event.button)
 
     def _end_drag_xform(self):
         if self.drag_xform is not None:
@@ -583,13 +584,13 @@ Resize viewing window using native window-manager controls.
         return view
 
     def on_timer(self, event):
-        print 'timer fired'
+        print('timer fired')
         self.update()
 
     def on_draw(self, event, color_mask=(True, True, True, True), pick=None, on_pick=None):
         if self.fps_count >= 10:
             t1 = datetime.datetime.now()
-            print "%f FPS" % (10.0 / (t1 - self.fps_t0).total_seconds())
+            print("%f FPS" % (10.0 / (t1 - self.fps_t0).total_seconds()))
             self.fps_t0 = t1
             self.fps_count = 1
         else:

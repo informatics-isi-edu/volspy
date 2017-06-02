@@ -271,6 +271,6 @@ def make_cube_clipped(shape, Zaspect, zoom, plane=None):
     try:
         return cube_verts, np.array(face_triangles, dtype=np.uint32), np.array(cutface_triangles, dtype=np.uint32)
     except:
-        print face_triangles, cutface_triangles
+        print(face_triangles, cutface_triangles)
         raise
 

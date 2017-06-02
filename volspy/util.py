@@ -10,6 +10,7 @@ import numpy as np
 import tifffile
 from tifffile import lazyattr
 from xml.dom import minidom
+from functools import reduce
 
 ImageMetadata = namedtuple('ImageMetadata', ['x_microns', 'y_microns', 'z_microns', 'axes'])
 
@@ -50,7 +51,7 @@ def bin_reduce(data, axes_s):
     assert len(axes_s) == data.ndim
 
     # reduce one axis at a time to shrink work for subsequent axes
-    for axis in map(lambda p: p[0], axes):
+    for axis in [p[0] for p in axes]:
         s = axes_s[axis]
 
         if s == 1:
@@ -99,7 +100,7 @@ class TiffLazyNDArray (object):
 
     def __init__(self, src, _output_plan=None):
         """Wrap an image source given by filename or an existing tifffile.TiffFile instance."""
-        if type(src) in [str, unicode]:
+        if isinstance(src, str):
             self.tf = tifffile.TiffFile(src)
         elif isinstance(src, tifffile.TiffFile):
             self.tf = src
@@ -115,7 +116,7 @@ class TiffLazyNDArray (object):
         
         self.stack_ndim = len(tfimg.shape) - len(page0.shape)
         self.stack_shape = tfimg.shape[0:self.stack_ndim]
-        print "TIFF %s %s %s, page0 %s, stack %s, axes %s?" % (tfimg.shape, tfimg.axes, tfimg.dtype, page0.shape, self.stack_shape, tfimg.axes)
+        print("TIFF %s %s %s, page0 %s, stack %s, axes %s?" % (tfimg.shape, tfimg.axes, tfimg.dtype, page0.shape, self.stack_shape, tfimg.axes))
         assert reduce(lambda a,b: a*b, self.stack_shape, 1) == len(tfimg.pages)
         assert tfimg.shape[self.stack_ndim:] == page0.shape, "TIFF page packing structure not understood"
 
@@ -131,7 +132,7 @@ class TiffLazyNDArray (object):
             # get OME-TIFF XML metadata
             p = list(self.tf)[0]
             d = minidom.parseString(p.tags['image_description'].value)
-            a = dict(d.getElementsByTagName('Pixels')[0].attributes.items())
+            a = dict(list(d.getElementsByTagName('Pixels')[0].attributes.items()))
             p = None
             d = None
             assert len(self.tf.series) == 1
@@ -406,8 +407,8 @@ def load_tiff(fname):
     data = TiffLazyNDArray(fname)
     try:
         data = canonicalize(data)
-    except Exception, e:
-        print e
+    except Exception as e:
+        print(e)
         # special case for raw TIFF (not LSM, not OME)
         if data.ndim == 3:
             data = data[(None,slice(None),slice(None),slice(None))] # add fake color dimension
@@ -417,8 +418,8 @@ def load_tiff(fname):
     try:
         z_microns, y_microns, x_microns = data.micron_spacing
         md = ImageMetadata(x_microns, y_microns, z_microns, data.axes)
-    except AttributeError, e:
-        print 'got error %s fetching metadata during load_tiff' % e
+    except AttributeError as e:
+        print('got error %s fetching metadata during load_tiff' % e)
         md = None
     return data, md
 
@@ -454,14 +455,14 @@ def load_and_mangle_image(fname):
 
     try:
         voxel_size = tuple(map(float, os.getenv('ZYX_IMAGE_GRID').split(",")))
-        print "ZYX_IMAGE_GRID environment forces image grid of %s micron." % (voxel_size,)
+        print("ZYX_IMAGE_GRID environment forces image grid of %s micron." % (voxel_size,))
         assert len(voxel_size) == 3
     except:
         try:
             voxel_size = I.micron_spacing
-            print "Using detected %s micron image grid." % (voxel_size,)
+            print("Using detected %s micron image grid." % (voxel_size,))
         except AttributeError:
-            print "ERROR: could not determine image grid spacing. Use ZYX_IMAGE_GRID=Z,Y,X to override."
+            print("ERROR: could not determine image grid spacing. Use ZYX_IMAGE_GRID=Z,Y,X to override.")
             raise
 
     setattr(I, 'micron_spacing', voxel_size)
@@ -471,12 +472,12 @@ def load_and_mangle_image(fname):
         ntile = int(os.getenv('ZNOISE_PERCENTILE'))
         I = I.force().astype(np.float32)
         zerofield = np.percentile(I, ntile, axis=1)
-        print 'Image %d percentile value over Z-axis ranges [%f,%f]' % (ntile, zerofield.min(), zerofield.max())
+        print('Image %d percentile value over Z-axis ranges [%f,%f]' % (ntile, zerofield.min(), zerofield.max()))
         I -= zerofield
-        print 'Image offset by %d percentile XY value to new range [%f,%f]' % (ntile, I.min(), I.max())
-        zero = float(os.getenv('ZNOISE_ZERO_LEVEL'), 0)
+        print('Image offset by %d percentile XY value to new range [%f,%f]' % (ntile, I.min(), I.max()))
+        zero = float(os.getenv('ZNOISE_ZERO_LEVEL', 0))
         I = I * (I >= 0.)
-        print 'Image clamped to range [%f,%f]' % (I.min(), I.max())
+        print('Image clamped to range [%f,%f]' % (I.min(), I.max()))
     except:
         pass
 
@@ -494,15 +495,15 @@ def load_and_mangle_image(fname):
         for start, stop in bbox:
             assert int(start) >= 0, "ZYX_SLICE START must be 0 or greater"
             assert int(stop) >= 1, "ZYX_SLICE STOP must be 1 or greater"
-        bbox = tuple(map(
-            lambda slc: slice(int(slc[0]), int(slc[1])),
-            bbox
-        )) + (slice(None),)
+        bbox = tuple([
+            slice(int(slc[0]), int(slc[1]))
+            for slc in bbox
+        ]) + (slice(None),)
         I = I.lazyget(bbox)
-        slice_origin = tuple(map(
-            lambda slc: slc.start or 0,
-            bbox[0:3]
-        ))
+        slice_origin = tuple([
+            slc.start or 0
+            for slc in bbox[0:3]
+        ])
 
     if I.shape[2] % 16:
         # trim for 16-pixel row alignment
