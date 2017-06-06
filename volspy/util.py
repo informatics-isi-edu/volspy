@@ -489,15 +489,29 @@ def load_and_mangle_image(fname):
     if bbox:
         bbox = bbox.split(",")
         assert len(bbox) == 3, "ZYX_SLICE must have comma-separated slices for 3 axes Z,Y,X"
-        bbox = [s.split(":") for s in bbox]
-        for p in bbox:
-            assert len(p) == 2, "ZYX_SLICE must have START:STOP pair for each axial slice"
-        for start, stop in bbox:
-            assert int(start) >= 0, "ZYX_SLICE START must be 0 or greater"
-            assert int(stop) >= 1, "ZYX_SLICE STOP must be 1 or greater"
+
+        def parse_axis(slc_s, axis_len):
+            bounds = slc_s.split(":")
+            assert len(bounds) == 2, "ZYX_SLICE must have colon-separated START:STOP pairs for each axis"
+
+            if bounds[0] != '':
+                assert int(bounds[0]) >= 0, "ZYX_SLICE START values must be 0 or greater or empty string"
+                assert int(bounds[0]) < (axis_len-2), "ZYX_SLICE START values must be less than axis length - 2"
+                bounds[0] = int(bounds[0])
+            else:
+                bounds[0] = 0
+
+            if bounds[1] != '':
+                assert int(bounds[1]) >= bounds[0], "ZYX_SLICE STOP values must be greater than START or empty string"
+                bounds[1] = int(bounds[1])
+            else:
+                bounds[1] = axis_len
+
+            return slice(bounds[0], bounds[1])
+
         bbox = tuple([
-            slice(int(slc[0]), int(slc[1]))
-            for slc in bbox
+            parse_axis(bbox[d], I.shape[d])
+            for d in range(3)
         ]) + (slice(None),)
         I = I.lazyget(bbox)
         slice_origin = tuple([
