@@ -128,7 +128,10 @@ class TiffLazyNDArray (object):
                 for a in range(len(tfimg.shape))
             ]
 
-        if self.tf.is_ome:
+        if isinstance(src, TiffLazyNDArray):
+            # preserve existing metadata
+            self.micron_spacing = src.micron_spacing
+        elif self.tf.is_ome:
             # get OME-TIFF XML metadata
             p = list(self.tf)[0]
             d = minidom.parseString(p.tags['image_description'].value)
@@ -142,7 +145,6 @@ class TiffLazyNDArray (object):
                 float(a['PhysicalSizeY']),
                 float(a['PhysicalSizeX'])
             )
-
         elif self.tf.is_lsm:
             # get LSM metadata
             lsmi = None
@@ -465,6 +467,7 @@ def load_and_mangle_image(fname):
             print("ERROR: could not determine image grid spacing. Use ZYX_IMAGE_GRID=Z,Y,X to override.")
             raise
 
+    meta = ImageMetadata(voxel_size[2], voxel_size[1], voxel_size[0], I.axes)
     setattr(I, 'micron_spacing', voxel_size)
 
     # temporary pre-processing hacks to investigate XY-correlated sensor artifacts...
