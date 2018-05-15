@@ -133,8 +133,13 @@ class TiffLazyNDArray (object):
             self.micron_spacing = src.micron_spacing
         elif self.tf.is_ome:
             # get OME-TIFF XML metadata
-            p = list(self.tf)[0]
-            d = minidom.parseString(p.tags['image_description'].value)
+            p = self.tf.pages[0]
+            try:
+                s = p.tags['ImageDescription'].value
+            except KeyError:
+                # older behavior of tifffile
+                s = p.tags['image_description']
+            d = minidom.parseString(s)
             a = dict(list(d.getElementsByTagName('Pixels')[0].attributes.items()))
             p = None
             d = None
@@ -148,7 +153,7 @@ class TiffLazyNDArray (object):
         elif self.tf.is_lsm:
             # get LSM metadata
             lsmi = None
-            for page in self.tf:
+            for page in self.tf.pages:
                 if page.is_lsm:
                     lsmi = page.cz_lsm_info
 
@@ -219,7 +224,7 @@ class TiffLazyNDArray (object):
                     if isinstance(in_slice, slice):
                         in_slice = slice(in_slice.start + start, in_slice.start + stop, in_slice.step * step)
                         w = in_slice.stop - in_slice.start
-                        w = w/in_slice.step + (w%in_slice.step and 1 or 0)
+                        w = w//in_slice.step + (w%in_slice.step and 1 or 0)
                         out_slice = slice(0,w,1)
                     else:
                         in_slice = None
@@ -256,7 +261,7 @@ class TiffLazyNDArray (object):
             tf_axis
             for tf_axis, in_slice, out_slice in input_plan
             if isinstance(in_slice, slice)
-        ]        
+        ]
         buffer = np.empty(buffer_shape, self.dtype)
 
         # generate page-by-page slicing
@@ -287,7 +292,12 @@ class TiffLazyNDArray (object):
         for out_slicing, in_slicing in generate_io_slices(stack_plan, page_plan):
             page = sum(map(lambda c, s: c*s, in_slicing[0:self.stack_ndim], stack_spans))
             page_slice = in_slicing[self.stack_ndim:]
-            buffer[out_slicing] = tfimg.pages[page].asarray(memmap=True)[page_slice]
+            try:
+                buffer[out_slicing] = tfimg.pages[page].asarray(out='memmap')[page_slice]
+            except TypeError as e:
+                # try older tifffile memmap interface
+                raise
+                buffer[out_slicing] = tfimg.pages[page].asarray(memmap=True)[page_slice]
             
         # apply current transposition to buffered dimensions
         buffer_axis = dict([(buffer_axes[d], d) for d in range(len(buffer_axes))])
@@ -363,7 +373,11 @@ class TiffLazyNDArray (object):
         amax = None
         tfimg = self.tf.series[0]
         for tfpage in tfimg.pages:
-            p = tfpage.asarray(memmap=True)
+            try:
+                p = tfpage.asarray(out='memmap')
+            except TypeError as e:
+                # try older tifffile api
+                p = tfpage.asarray(memmap=True)
             pmin = float(p.min())
             pmax = float(p.max())
             if amin is not None:
@@ -527,7 +541,7 @@ def load_and_mangle_image(fname):
         slc = tuple([
             slice(None),
             slice(None),
-            slice(0,I.shape[2]/16*16),
+            slice(0,I.shape[2]//16*16),
             slice(None)
         ])
         if hasattr(I, 'lazyget'):
