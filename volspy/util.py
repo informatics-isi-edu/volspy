@@ -296,7 +296,6 @@ class TiffLazyNDArray (object):
                 buffer[out_slicing] = tfimg.pages[page].asarray(out='memmap')[page_slice]
             except TypeError as e:
                 # try older tifffile memmap interface
-                raise
                 buffer[out_slicing] = tfimg.pages[page].asarray(memmap=True)[page_slice]
             
         # apply current transposition to buffered dimensions
