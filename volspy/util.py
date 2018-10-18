@@ -117,7 +117,7 @@ class TiffLazyNDArray (object):
         self.stack_ndim = len(tfimg.shape) - len(page0.shape)
         self.stack_shape = tfimg.shape[0:self.stack_ndim]
         print("TIFF %s %s %s, page0 %s, stack %s, axes %s?" % (tfimg.shape, tfimg.axes, tfimg.dtype, page0.shape, self.stack_shape, tfimg.axes))
-        assert reduce(lambda a,b: a*b, self.stack_shape, 1) == len(tfimg.pages)
+        assert reduce(lambda a,b: a*b, self.stack_shape, 1) == len(tfimg.pages), "TIFF page count %s inconsistent with expected stack shape %s" % (len(tfimg.pages), self.stack_shape)
         assert tfimg.shape[self.stack_ndim:] == page0.shape, "TIFF page packing structure not understood"
 
         if _output_plan:
