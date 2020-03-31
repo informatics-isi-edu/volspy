@@ -143,9 +143,12 @@ class ImageManager (object):
         print((D, H, W, C), '<-', I0.shape, list(self.channels), I0.dtype)
 
         # normalize for OpenGL [0,1.0] or [0,2**N-1] and zero black-level
-        maxval = I0.max()
-        minval = I0.min()
-        scale = 1.0/(float(maxval) - float(minval))
+        maxval = float(I0.max())
+        minval = float(I0.min())
+        if maxval > minval:
+            scale = 1.0/(maxval - minval)
+        else:
+            scale = 1.0
         if I0.dtype == np.uint8 or I0.dtype == np.int8:
             tmpout = np.zeros((D, H, W, C), dtype=np.uint8)
             scale *= float(2**8-1)
