@@ -30,3 +30,6 @@ try:
 except ImportError as e:
     import sys
     sys.stderr.write("WARNING: %s\n" % e)
+
+
+__version__ = '1.0'

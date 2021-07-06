@@ -1,15 +1,22 @@
 
 #
-# Copyright 2015 University of Southern California
+# Copyright 2015, 2021 University of Southern California
 # Distributed under the (new) BSD License. See LICENSE.txt for more info.
 #
 
-from distutils.core import setup
+import re
+import io
+from setuptools import setup
+
+__version__ = re.search(
+    r'__version__\s*=\s*[\'"]([^\'"]*)[\'"]',
+    io.open('volspy/__init__.py', encoding='utf_8_sig').read()
+    ).group(1)
 
 setup(
     name="volspy",
     description="volumetric image visualization using vispy",
-    version="0.1-prerelease",
+    version=__version__,
     packages=["volspy"],
     scripts=["bin/volspy-viewer"],
     requires=["vispy", "numpy", "tifffile"],
@@ -24,6 +31,5 @@ setup(
         'Operating System :: MacOS :: MacOS X',
         'Operating System :: POSIX',
         'Programming Language :: Python',
-        'Programming Language :: Python :: 2.6',
-        'Programming Language :: Python :: 2.7',
+        'Programming Language :: Python :: 3.6',
     ])
